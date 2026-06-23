@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Pixel Pandemonium Instructions</title>
+  <link href="assets/css/drawingcanvas.css" rel="stylesheet">
+  <script src="assets/js/pixel-pandemonium.js"></script>
+</head>
+<body>
+  <table width="100%" border="0" cellspacing="0" cellpadding="4">
+    <tr>
+      <td colspan="9" class="topLevelBody">
+        <div align="center">
+          <span style="font-size:24px;"><strong>Pixel Pandemonium Instructions</strong></span><br>
+          <strong id="pictureTitle"></strong> <span class="mono" id="instanceCode"></span>
+        </div>
+      </td>
+    </tr>
+  </table>
+  <div class="page-wrap">
+    <p>Please assist us by preparing one page of an image, by building it one pixel at a time.</p>
+
+    <h3>Choose a Tile to Work On</h3>
+    <canvas id="tileSelectorCanvas" width="400" height="400" style="border:2px solid #333;cursor:pointer"></canvas>
+    <p id="tileStatusText" style="font-weight:bold"></p>
+    <div class="tile-legend">
+      <span><span class="legend-swatch" style="background:white"></span> Available</span>
+      <span><span class="legend-swatch" style="background:#CCE5FF"></span> In Progress</span>
+      <span><span class="legend-swatch" style="background:#FFE0B2"></span> Has Errors</span>
+      <span><span class="legend-swatch" style="background:#CCC"></span> Complete</span>
+    </div>
+    <p><div id="remainingPages"></div></p>
+
+    <table border="0" cellspacing="4" cellpadding="0">
+      <tr>
+        <td width="650">
+          <div id="pageInstructions" style="display:table-cell;">
+            <p>The code provided below (&ldquo;Your Data&rdquo;) represents the pixels on a grid, as shown below.</p>
+            <table border="1" cellspacing="0" cellpadding="10">
+              <tr>
+                <td width="520" valign="middle">
+                  <div><strong>Your Data</strong>: <span id="data" class="mono"></span></div>
+                </td>
+                <td id="pixelChart" width="48" valign="middle"><p>&nbsp;</p></td>
+              </tr>
+            </table>
+            <p>Each number represents a particular color for the pixel in that position.<br>
+              1. Find the colors you need by viewing the color code chart.<br>
+              2. For each pixel, click the color you need, then the position it belongs in.</p>
+            <p>3. <u>A Quick Lesson in Data Compression</u>: Here is what your data looks like in compressed format:</p>
+            <div id="compressed" class="mono" style="margin-left: 20px;"></div>
+            <p>This is Page:
+              <span style="width:30px; text-align:center; border:solid black 1px;">
+                &nbsp;&nbsp;&nbsp;<span id="thePage">&nbsp;&nbsp;&nbsp;</span>&nbsp;&nbsp;&nbsp;
+              </span>
+              of the composite image.
+            </p>
+          </div>
+        </td>
+        <td>
+          Click on a color below, and then click on each of the rectangles below to fill it in with that color according to the code on the left!
+          <br>
+          <div id="canvascontainer">
+            <div id="maincanvascontainer">
+              <canvas id="drawCanvas" width="500" height="300" style="border:1px solid #000000;"></canvas>
+            </div>
+          </div>
+          <br><br>
+          <input type="color" id="chosenColor" value="#000000" style="visibility:hidden">
+          <div id="colorpicker" style="max-width:560px;"></div>
+        </td>
+      </tr>
+    </table>
+  </div>
+  <script>PixelPandemonium.initStudent();</script>
+</body>
+</html>

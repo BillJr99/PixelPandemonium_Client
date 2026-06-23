@@ -1,0 +1,171 @@
+body {
+  font-family: "Frank Ruhl Libre", Georgia, "Times New Roman", serif;
+  color: #111;
+  background: #fff;
+  margin: 0;
+}
+
+a {
+  color: #0645ad;
+  cursor: pointer;
+}
+
+.topLevelBody {
+  background-color: #EBEDEC;
+  color: #111;
+}
+
+.headerlabel {
+  background-color: #4F80B0;
+  color: #EBEDEC;
+  display: inline-block;
+  font-family: "Old Standard TT", Arial, Helvetica, sans-serif;
+  font-weight: bold;
+  padding: 8px 10px;
+}
+
+.mono {
+  font-family: "Lucida Sans Typewriter", "Courier New", monospace;
+  font-size: 18px;
+  font-weight: bolder;
+}
+
+.pixel {
+  font-family: "Press Start 2P", "Courier New", monospace;
+}
+
+.pp-nav {
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #4F80B0;
+}
+
+.pp-nav li {
+  float: left;
+}
+
+.pp-nav a,
+.pp-nav button,
+.pp-nav select {
+  display: inline-block;
+  color: #EBEDEC;
+  text-align: center;
+  padding: 14px 16px;
+  font-family: "Old Standard TT", Arial, Helvetica, sans-serif;
+  font-weight: bold;
+  text-decoration: none;
+  background-color: #4F80B0;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.pp-nav a:hover,
+.pp-nav button:hover {
+  background-color: #99CC99;
+  text-decoration: none;
+}
+
+.page-wrap {
+  padding: 18px;
+}
+
+.panel {
+  border: 1px solid #999;
+  background: #f7f7f7;
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 180px minmax(220px, 420px);
+  gap: 10px;
+  align-items: center;
+}
+
+.form-grid input,
+.form-grid select {
+  font-size: 16px;
+  padding: 6px;
+}
+
+button,
+input[type="button"],
+input[type="submit"] {
+  background-color: #4F80B0;
+  color: #EBEDEC;
+  border: none;
+  padding: 8px 12px;
+  font-family: "Old Standard TT", Arial, Helvetica, sans-serif;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover {
+  background-color: #99CC99;
+  color: #111;
+}
+
+#canvascontainer {
+  margin: 0;
+  padding: 0;
+  display: inline-block;
+}
+
+#maincanvascontainer {
+  float: left;
+  margin: 0;
+  padding: 0;
+  display: inline-block;
+}
+
+canvas {
+  image-rendering: pixelated;
+}
+
+.tile-legend {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #999;
+  vertical-align: middle;
+}
+
+.url-box {
+  width: min(100%, 780px);
+  font-family: "Courier New", monospace;
+}
+
+.qr-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.qr-row img {
+  width: 150px;
+  height: 150px;
+  border: 1px solid #999;
+}
+
+.error {
+  color: #b00020;
+  font-weight: bold;
+}
+
+.ok {
+  color: #0b6623;
+  font-weight: bold;
+}

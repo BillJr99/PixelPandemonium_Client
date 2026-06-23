@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Pixel Pandemonium Teacher Dashboard</title>
+  <link href="assets/css/drawingcanvas.css" rel="stylesheet">
+  <script src="assets/js/pixel-pandemonium.js"></script>
+</head>
+<body>
+  <table width="100%" border="0" cellspacing="0" cellpadding="4">
+    <tr>
+      <td colspan="9" class="topLevelBody">
+        <div align="center">
+          <span style="font-size:24px;"><strong>Pixel Pandemonium</strong></span> - Teacher Dashboard<br>
+          <strong>Jeffrey L. Popyack/Drexel University, William M. Mongan/Ursinus College</strong>
+        </div>
+      </td>
+    </tr>
+  </table>
+  <ul class="pp-nav">
+    <li><a href="index.html">Pixel Pandemonium</a></li>
+    <li><a href="about.html">About</a></li>
+  </ul>
+  <div class="page-wrap">
+    <h1>Teacher Dashboard</h1>
+    <div class="panel">
+      <h2>Create an Instance</h2>
+      <form id="createForm">
+        <div class="form-grid">
+          <label for="pictureId">Picture</label>
+          <select id="pictureId" required></select>
+          <label for="teacherName">Teacher Name</label>
+          <input id="teacherName" required>
+          <label for="dateTime">Date/Time</label>
+          <input id="dateTime" type="datetime-local" required>
+          <label for="expirationHours">Expiration Hours</label>
+          <input id="expirationHours" type="number" min="1" step="1" required>
+        </div>
+        <p><button type="submit">Create Instance</button></p>
+      </form>
+      <div id="createResult"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Reset an Instance</h2>
+      <form id="resetForm">
+        <div class="form-grid">
+          <label for="resetInstanceCode">Instance Code</label>
+          <input id="resetInstanceCode" required>
+          <label for="resetAdminCode">Admin Code</label>
+          <input id="resetAdminCode" required>
+        </div>
+        <p><button type="submit">Reset Instance</button></p>
+      </form>
+      <div id="resetResult"></div>
+    </div>
+  </div>
+  <script>PixelPandemonium.initDashboard();</script>
+</body>
+</html>

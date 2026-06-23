@@ -1,0 +1,7 @@
+title: "Pixel Pandemonium"
+description: "Standalone Pixel Pandemonium client"
+baseurl: ""
+url: ""
+include:
+  - files
+  - config.yaml
