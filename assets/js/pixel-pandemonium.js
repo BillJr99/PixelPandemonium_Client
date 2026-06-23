@@ -719,6 +719,14 @@
     initStudent,
     initReplay,
     initIndex,
-    absoluteUrl
+    absoluteUrl,
+    __test: {
+      parseYaml,
+      clientValidateCheckDigit,
+      luhnCheckDigit,
+      rgbToHex,
+      getTileStatus: function (row, col) { return getTileStatus(row, col); },
+      state
+    }
   };
 })();

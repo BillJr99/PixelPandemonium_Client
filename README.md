@@ -93,13 +93,28 @@ The helper script checks that you are on `gh-pages` and builds the site:
 
 Keep the server running at the configured `server_url`, or let the harness prompt you to start it.
 
-Run:
+Static/config/API client smoke tests:
 
 ```bash
 ./test.sh
 ```
 
-The harness reads `config.yaml`, checks or waits for the server at `server_url`, verifies required files and feature hooks, creates a server instance, and runs a Jekyll build if Jekyll is installed.
+Browser orchestration tests:
+
+```bash
+npm install
+./browser-test.sh
+```
+
+All client tests:
+
+```bash
+./all-tests.sh
+```
+
+The smoke harness reads `config.yaml`, checks or waits for the server at `server_url`, verifies required files and feature hooks, creates a server instance, and runs a Jekyll build if Jekyll is installed. Browser tests use Playwright to exercise the teacher dashboard, student tile submission, amber error state, replay, auto-finish, and reset.
+
+Manual user-level test scenarios are in `docs/USER_LEVEL_TESTS.md`.
 
 ## Styling Policy
 

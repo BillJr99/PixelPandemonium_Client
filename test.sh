@@ -6,11 +6,25 @@ cd "$ROOT"
 
 SERVER_URL="$(sed -n 's/^server_url:[[:space:]]*//p' config.yaml | head -n 1 | tr -d '"' | tr -d "'")"
 SERVER_URL="${SERVER_URL:-http://localhost:8000}"
+SERVER_PID=""
+
+cleanup() {
+  if [ -n "$SERVER_PID" ]; then
+    kill "$SERVER_PID" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
 
 echo "Checking configured server: $SERVER_URL"
 if ! curl -fsS "$SERVER_URL/health" >/dev/null 2>&1; then
-  echo "Start the Pixel Pandemonium server at $SERVER_URL, then press Enter."
-  read -r _
+  if [ -f ../Pixel_Pandemonium_server/package.json ]; then
+    echo "Starting sibling server for client smoke tests."
+    (cd ../Pixel_Pandemonium_server && npm start) >/tmp/pixel-pandemonium-client-server.log 2>&1 &
+    SERVER_PID="$!"
+  else
+    echo "Start the Pixel Pandemonium server at $SERVER_URL, then press Enter."
+    read -r _
+  fi
 fi
 
 for _ in $(seq 1 60); do

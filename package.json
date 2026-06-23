@@ -1,0 +1,15 @@
+{
+  "name": "pixel-pandemonium-client",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static Pixel Pandemonium client tests",
+  "scripts": {
+    "test": "./test.sh",
+    "test:browser": "./browser-test.sh",
+    "test:all": "./all-tests.sh",
+    "playwright": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  }
+}
