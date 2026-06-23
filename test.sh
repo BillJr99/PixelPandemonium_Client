@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
-SERVER_URL="$(awk -F': *' '/^server_url:/ { print $2 }' config.yaml | tr -d '"' | tr -d "'")"
+SERVER_URL="$(sed -n 's/^server_url:[[:space:]]*//p' config.yaml | head -n 1 | tr -d '"' | tr -d "'")"
 SERVER_URL="${SERVER_URL:-http://localhost:8000}"
 
 echo "Checking configured server: $SERVER_URL"
