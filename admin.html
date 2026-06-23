@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Pixel Pandemonium Admin</title>
+  <link href="assets/css/drawingcanvas.css" rel="stylesheet">
+  <script src="assets/js/pixel-pandemonium.js"></script>
+</head>
+<body>
+  <table width="100%" border="0" cellspacing="0" cellpadding="4">
+    <tr>
+      <td colspan="9" class="topLevelBody">
+        <div align="center">
+          <span style="font-size:24px;"><strong>Pixel Pandemonium Admin</strong></span><br>
+          <strong id="pictureTitle"></strong> <span class="mono" id="instanceCode"></span>
+        </div>
+      </td>
+    </tr>
+  </table>
+  <ul class="pp-nav">
+    <li><a href="index.html">Pixel Pandemonium</a></li>
+    <li><a href="teacher-dashboard.html">Teacher Dashboard</a></li>
+  </ul>
+  <div class="page-wrap">
+    <div id="adminStatus"></div>
+    <div class="panel">
+      <h2>Instance Links</h2>
+      <p><a id="studentLink" target="_blank">Student page</a></p>
+      <p><a id="replayLink" target="_blank">Replay page</a></p>
+    </div>
+    <div class="panel">
+      <h2>Animation</h2>
+      <p>
+        <label for="animationSource">Source</label>
+        <select id="animationSource">
+          <option value="instance">Instance data only</option>
+          <option value="finished">Finished product, filling missing pixels</option>
+        </select>
+        <label for="animationOrder">Order</label>
+        <select id="animationOrder">
+          <option value="chronological">Student completion order</option>
+          <option value="existing-then-sequential">Existing work, then sequential fill</option>
+          <option value="random">Random order</option>
+        </select>
+        <button id="adminReplayButton" type="button">Animate Instance Data</button>
+        <button id="adminFinishButton" type="button">Animate Finished Image</button>
+      </p>
+      <canvas id="drawCanvas" width="720" height="576" style="border:1px solid #000000;"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Replay Data</h2>
+      <div id="adminTileSummary"></div>
+      <p>
+        <button id="refreshRowsButton" type="button">Refresh Rows</button>
+        <button id="deleteInstanceButton" type="button">Deactivate Instance</button>
+      </p>
+      <div id="adminRows"></div>
+    </div>
+  </div>
+  <script>PixelPandemonium.initAdmin();</script>
+</body>
+</html>

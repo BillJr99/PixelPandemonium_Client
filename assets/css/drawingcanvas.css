@@ -160,6 +160,24 @@ canvas {
   border: 1px solid #999;
 }
 
+.admin-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.admin-table th,
+.admin-table td {
+  border: 1px solid #999;
+  padding: 6px;
+  vertical-align: top;
+}
+
+.admin-table textarea {
+  width: 100%;
+  min-height: 48px;
+  font-family: "Courier New", monospace;
+}
+
 .error {
   color: #b00020;
   font-weight: bold;

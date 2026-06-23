@@ -39,7 +39,7 @@ Edit `config.yaml`.
 
 Use two terminals for local end-to-end testing.
 
-Terminal 1, start the server:
+Terminal 1, start the server locally:
 
 ```bash
 cd ../Pixel_Pandemonium_server
@@ -59,13 +59,22 @@ Open:
 http://127.0.0.1:4000
 ```
 
+Common pages:
+
+```text
+http://127.0.0.1:4000/teacher-dashboard.html
+http://127.0.0.1:4000/admin.html?instance=INSTANCE-CODE&admin=ADMIN-CODE
+http://127.0.0.1:4000/instructions.html?instance=INSTANCE-CODE
+http://127.0.0.1:4000/replay.html?instance=INSTANCE-CODE
+```
+
 ## GitHub Pages
 
 This repository is intended to deploy from the `gh-pages` branch.
 
 1. Keep the deployable static site on `gh-pages`.
 2. Configure GitHub Pages to serve from the `gh-pages` branch root.
-3. Set `base_url` and `server_url` in `config.yaml` to production URLs.
+3. Set `base_url`, `server_url`, and `realtime_url` in `config.yaml` to production URLs.
 4. Commit and push.
 
 The helper script checks that you are on `gh-pages` and builds the site:
@@ -74,11 +83,23 @@ The helper script checks that you are on `gh-pages` and builds the site:
 ./scripts/deploy-gh-pages.sh
 ```
 
+Example production config values:
+
+```yaml
+server_url: https://your-worker-or-node-host.example.com
+realtime_url: https://your-worker-or-node-host.example.com
+base_url: https://your-github-user.github.io/PixelPandemonium_client
+```
+
+For GitHub Pages, the server must be deployed separately. The static client cannot store replay data by itself.
+
 ## Use Cases
 
 - Teacher opens `teacher-dashboard.html`.
 - Teacher selects a picture, enters name/date/time, and creates an instance.
 - Dashboard displays student, replay, and admin URLs plus QR codes.
+- The generated student URL is the URL students use to participate.
+- The generated admin URL opens `admin.html` for the selected instance.
 - Students open the student URL and get the correct picture from instance metadata.
 - Students use the clickable tile selector instead of row/column dropdowns.
 - Blank, in-progress, complete, and error tiles are visible at a glance.
@@ -87,6 +108,11 @@ The helper script checks that you are on `gh-pages` and builds the site:
 - Teacher opens the replay URL and sees the image rebuild from replay data.
 - Teacher can auto-finish the replay from the expected image data.
 - Teacher can reset an instance with the admin URL/code.
+- Admin page shows incomplete pages and pages with mistakes.
+- Admin page can edit or delete individual replay rows.
+- Admin page can deactivate an instance. Deactivation preserves replay rows but makes the instance unavailable to students and normal replay/status pages.
+- Admin page can generate a time-lapse from instance data in student completion order or random order.
+- Admin page can generate a finished-product time-lapse even if the activity is incomplete, using existing student work first and then filling missing pixels sequentially or randomly.
 - Multiple teachers can run the same picture at once because all data is instance-scoped.
 
 ## Tests
@@ -96,6 +122,7 @@ Keep the server running at the configured `server_url`, or let the harness promp
 Static/config/API client smoke tests:
 
 ```bash
+npm install
 ./test.sh
 ```
 
@@ -112,9 +139,15 @@ All client tests:
 ./all-tests.sh
 ```
 
-The smoke harness reads `config.yaml`, checks or waits for the server at `server_url`, verifies required files and feature hooks, creates a server instance, and runs a Jekyll build if Jekyll is installed. Browser tests use Playwright to exercise the teacher dashboard, student tile submission, amber error state, replay, auto-finish, and reset.
+The smoke harness reads `config.yaml`, starts the sibling server when available, verifies required files and feature hooks, creates a server instance, and runs a Jekyll build if Jekyll is installed. Browser tests use Playwright to exercise the teacher dashboard, student tile submission, amber error state, replay, auto-finish, admin reset/deactivation/data editing flows, and generated URLs.
 
 Manual user-level test scenarios are in `docs/USER_LEVEL_TESTS.md`.
+
+If Playwright reports a missing browser, run:
+
+```bash
+npx playwright install chromium
+```
 
 ## Styling Policy
 

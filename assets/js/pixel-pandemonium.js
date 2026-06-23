@@ -145,6 +145,25 @@
     return data;
   }
 
+  async function validateAdminInstance() {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("instance");
+    const admin = params.get("admin");
+    if (!code || !admin) showFatal("Missing instance or admin code.");
+    if (!clientValidateCheckDigit(code)) showFatal("Invalid instance code. Please double-check the URL.");
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(code) + "/admin?admin=" + encodeURIComponent(admin)));
+    const data = await res.json();
+    if (!res.ok) showFatal(data.error || "This admin URL is not valid.");
+    state.instance = {
+      ...data,
+      instanceCode: code,
+      adminCode: admin,
+      studentUrl: absoluteUrl("instructions.html?instance=" + encodeURIComponent(code)),
+      replayUrl: absoluteUrl("replay.html?instance=" + encodeURIComponent(code))
+    };
+    return state.instance;
+  }
+
   function findPicture(id) {
     return (state.config.pictures || []).find((pic) => pic.id === id) || state.config.pictures[0];
   }
@@ -564,6 +583,59 @@
     if (rows.length === 0) clearInterval(state.replayTimer);
   }
 
+  function orderedRows(rows) {
+    const copy = rows.slice();
+    const order = document.getElementById("animationOrder");
+    if (order && order.value === "random") {
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = copy[i];
+        copy[i] = copy[j];
+        copy[j] = tmp;
+      }
+    }
+    return copy;
+  }
+
+  function completedImageRows(existingRows, mode) {
+    const existingByCell = new Map();
+    existingRows.forEach((row) => {
+      const msg = messageParts(row.DATA);
+      if (Number.isFinite(msg.xsquare) && Number.isFinite(msg.ysquare)) {
+        existingByCell.set(msg.xsquare + "," + msg.ysquare, row);
+      }
+    });
+
+    const expectedRows = expectedCompletionRows();
+    const missing = [];
+    expectedRows.forEach((row) => {
+      const msg = messageParts(row.DATA);
+      const key = msg.xsquare + "," + msg.ysquare;
+      if (!existingByCell.has(key)) missing.push(row);
+    });
+
+    if (mode === "random") {
+      for (let i = missing.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = missing[i];
+        missing[i] = missing[j];
+        missing[j] = tmp;
+      }
+    }
+
+    return existingRows.concat(missing);
+  }
+
+  function rowsFromFilled() {
+    const rows = [];
+    for (let r = 0; r < state.filled.length; r++) {
+      for (let c = 0; c < state.filled[r].length; c++) {
+        if (state.filled[r][c]) rows.push({ DATA: state.filled[r][c] });
+      }
+    }
+    return rows;
+  }
+
   function expectedCompletionRows() {
     const rows = [];
     const canvas = document.getElementById("drawCanvas");
@@ -638,6 +710,127 @@
       });
       const data = await res.json();
       setHtml("resetResult", res.ok ? '<p class="ok">Instance reset.</p>' : '<p class="error">' + (data.error || "Reset failed") + "</p>");
+    });
+  }
+
+  async function adminFetchRows() {
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/admin?admin=" + encodeURIComponent(state.instance.adminCode)));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Admin fetch failed");
+    resetFilled();
+    data.rows.forEach((row) => applyMessage(row.DATA));
+    state.instance.rows = data.rows;
+    return data.rows;
+  }
+
+  function renderAdminRows(rows) {
+    if (!rows.length) {
+      setHtml("adminRows", "<p>No replay rows for this instance.</p>");
+      return;
+    }
+    const html = [
+      '<table class="admin-table">',
+      "<thead><tr><th>ID</th><th>Timestamp</th><th>Data</th><th>Actions</th></tr></thead><tbody>"
+    ];
+    rows.forEach((row) => {
+      html.push(
+        '<tr data-row-id="' + row.ID + '">',
+        "<td>" + row.ID + "</td>",
+        "<td>" + row.TIMESTAMP + "</td>",
+        '<td><textarea data-role="data">' + String(row.DATA || "").replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</textarea></td>",
+        '<td><button type="button" data-action="update">Update</button> <button type="button" data-action="delete">Delete</button></td>',
+        "</tr>"
+      );
+    });
+    html.push("</tbody></table>");
+    setHtml("adminRows", html.join(""));
+  }
+
+  function renderAdminTileSummary() {
+    const incomplete = [];
+    const mistakes = [];
+    for (let col = 0; col < state.numCols; col++) {
+      for (let row = 0; row < state.numRows; row++) {
+        const status = getTileStatus(row, col);
+        if (status !== "complete") incomplete.push(pageLabel(row, col));
+        if (status === "error") mistakes.push(pageLabel(row, col));
+      }
+    }
+    setHtml("adminTileSummary", [
+      "<p><strong>Incomplete pages:</strong> " + (incomplete.length ? incomplete.join(", ") : "None") + "</p>",
+      "<p><strong>Pages with mistakes:</strong> " + (mistakes.length ? mistakes.join(", ") : "None") + "</p>"
+    ].join(""));
+  }
+
+  async function refreshAdmin() {
+    const rows = await adminFetchRows();
+    renderAdminRows(rows);
+    renderAdminTileSummary();
+    makeReplayGrid();
+    rowsFromFilled().forEach((row) => drawReplayMessage(row.DATA));
+  }
+
+  async function initAdmin() {
+    await loadConfig();
+    await validateAdminInstance();
+    await loadPicture(state.instance.pictureId);
+    setText("pictureTitle", state.picture.title);
+    setText("instanceCode", state.instance.instanceCode);
+    document.getElementById("studentLink").href = state.instance.studentUrl;
+    document.getElementById("studentLink").textContent = state.instance.studentUrl;
+    document.getElementById("replayLink").href = state.instance.replayUrl;
+    document.getElementById("replayLink").textContent = state.instance.replayUrl;
+    setHtml("adminStatus", '<p class="ok">Admin access loaded for ' + state.instance.teacherName + ".</p>");
+    await refreshAdmin();
+
+    document.getElementById("refreshRowsButton").addEventListener("click", refreshAdmin);
+    document.getElementById("adminReplayButton").addEventListener("click", async () => {
+      const rows = await adminFetchRows();
+      const source = document.getElementById("animationSource").value;
+      const order = document.getElementById("animationOrder").value;
+      if (source === "finished") {
+        replayRows(completedImageRows(order === "random" ? orderedRows(rows) : rows, order), 5);
+      } else {
+        replayRows(orderedRows(rows), 5);
+      }
+    });
+    document.getElementById("adminFinishButton").addEventListener("click", () => {
+      makeReplayGrid();
+      const order = document.getElementById("animationOrder").value;
+      const rows = order === "existing-then-sequential"
+        ? completedImageRows(state.instance.rows || [], order)
+        : order === "random"
+          ? completedImageRows(orderedRows(state.instance.rows || []), order)
+          : completedImageRows(state.instance.rows || [], "existing-then-sequential");
+      replayRows(rows, 1);
+    });
+    document.getElementById("deleteInstanceButton").addEventListener("click", async () => {
+      if (!window.confirm("Deactivate this instance? Replay data will be preserved, but students will no longer be able to access it.")) return;
+      const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/deactivate"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminCode: state.instance.adminCode })
+      });
+      const data = await res.json();
+      setHtml("adminStatus", res.ok ? '<p class="ok">Instance deactivated. Replay data was preserved.</p>' : '<p class="error">' + (data.error || "Deactivate failed") + "</p>");
+    });
+    document.getElementById("adminRows").addEventListener("click", async (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      const rowEl = button.closest("tr[data-row-id]");
+      const id = rowEl.dataset.rowId;
+      const action = button.dataset.action;
+      const endpoint = "/instance/" + encodeURIComponent(state.instance.instanceCode) + "/event/" + encodeURIComponent(id) + "/" + action;
+      const body = { adminCode: state.instance.adminCode };
+      if (action === "update") body.data = rowEl.querySelector('textarea[data-role="data"]').value;
+      const res = await fetch(serverUrl(endpoint), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      setHtml("adminStatus", res.ok ? '<p class="ok">Row ' + action + "d.</p>" : '<p class="error">' + (data.error || "Action failed") + "</p>");
+      if (res.ok) await refreshAdmin();
     });
   }
 
@@ -716,6 +909,7 @@
 
   window.PixelPandemonium = {
     initDashboard,
+    initAdmin,
     initStudent,
     initReplay,
     initIndex,
