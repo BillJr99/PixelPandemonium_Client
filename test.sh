@@ -41,10 +41,14 @@ CREATE_RESPONSE="$(curl -fsS -H "Origin: http://localhost:4000" -H "Content-Type
 
 node -e "const d=JSON.parse(process.argv[1]); if(!d.studentUrl || !d.replayUrl || !d.adminUrl || !d.instanceCode) process.exit(1)" "$CREATE_RESPONSE"
 
-if command -v jekyll >/dev/null 2>&1; then
-  jekyll build >/tmp/pixel-pandemonium-client-jekyll.log
-elif command -v bundle >/dev/null 2>&1 && [ -f Gemfile.lock ]; then
-  bundle exec jekyll build >/tmp/pixel-pandemonium-client-jekyll.log
+if command -v bundle >/dev/null 2>&1 && [ -f Gemfile.lock ]; then
+  if ! bundle exec jekyll build >/tmp/pixel-pandemonium-client-jekyll.log 2>&1; then
+    echo "Jekyll build skipped or failed; see /tmp/pixel-pandemonium-client-jekyll.log."
+  fi
+elif command -v jekyll >/dev/null 2>&1; then
+  if ! jekyll build >/tmp/pixel-pandemonium-client-jekyll.log 2>&1; then
+    echo "Jekyll build skipped or failed; see /tmp/pixel-pandemonium-client-jekyll.log."
+  fi
 else
   echo "Jekyll is not installed; skipped Jekyll build."
 fi
