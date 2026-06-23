@@ -117,12 +117,25 @@ test("admin page edits rows, reports incomplete and mistake pages, animates, and
   await page.goto(`/admin.html?instance=${encodeURIComponent(instance.instanceCode)}&admin=${encodeURIComponent(instance.adminCode)}`);
   await expect(page.locator("#adminStatus")).toContainText("Admin access loaded");
   await expect(page.locator("#adminTileSummary")).toContainText("Incomplete pages:");
+  await expect(page.locator("#adminTileSummary")).toContainText("A1");
   await expect(page.locator("#adminTileSummary")).toContainText("Pages with mistakes:");
+  await expect(page.locator("#adminTileSummary")).toContainText("A1");
   await expect(page.locator(".admin-table tbody tr")).toHaveCount(1);
 
   await page.locator('.admin-table textarea[data-role="data"]').fill("0,0,10,10,#00ff00,0,0");
   await page.locator('.admin-table button[data-action="update"]').click();
   await expect(page.locator("#adminStatus")).toContainText("Row updated");
+
+  await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/insert`, {
+    headers: { Origin: "http://localhost:4000" },
+    data: { data: "0,0,10,10,#111111,2,0" }
+  });
+  await page.getByRole("button", { name: "Refresh Rows" }).click();
+  await expect(page.locator(".admin-table tbody tr")).toHaveCount(2);
+  const rowToDelete = page.locator(".admin-table tbody tr", { hasText: "#111111" });
+  await rowToDelete.locator('button[data-action="delete"]').click();
+  await expect(page.locator("#adminStatus")).toContainText("Row deleted");
+  await expect(page.locator(".admin-table tbody tr")).toHaveCount(1);
 
   await page.locator("#animationSource").selectOption("finished");
   await page.locator("#animationOrder").selectOption("existing-then-sequential");
