@@ -37,7 +37,9 @@ Edit `config.yaml`.
 
 ## Local Run
 
-Start the server first:
+Use two terminals for local end-to-end testing.
+
+Terminal 1, start the server:
 
 ```bash
 cd ../Pixel_Pandemonium_server
@@ -45,7 +47,7 @@ npm install
 npm start
 ```
 
-Then run the client:
+Terminal 2, run the client:
 
 ```bash
 ./scripts/run-local.sh
@@ -88,6 +90,8 @@ The helper script checks that you are on `gh-pages` and builds the site:
 - Multiple teachers can run the same picture at once because all data is instance-scoped.
 
 ## Tests
+
+Keep the server running at the configured `server_url`, or let the harness prompt you to start it.
 
 Run:
 
