@@ -108,6 +108,18 @@
     throw new Error(message);
   }
 
+  function logClient(level, message, details) {
+    const entry = {
+      timestamp: new Date().toISOString(),
+      component: "pixel-pandemonium-client",
+      level,
+      message,
+      details: details || {}
+    };
+    const logger = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
+    logger.call(console, "[PixelPandemonium]", entry);
+  }
+
   function digitsOnly(value) {
     return String(value || "").replace(/\D/g, "");
   }
@@ -299,11 +311,25 @@
   }
 
   async function sendReplay(message) {
-    await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/insert"), {
+    const url = serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/insert");
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ data: message })
     });
+    if (!res.ok) {
+      const responseText = await res.text().catch(() => "");
+      logClient("error", "Replay insert failed", {
+        url,
+        status: res.status,
+        statusText: res.statusText,
+        responseText,
+        instanceCode: state.instance && state.instance.instanceCode,
+        message
+      });
+      throw new Error("Replay insert failed with HTTP " + res.status);
+    }
+    return res;
   }
 
   function fayeChannel() {
@@ -545,11 +571,21 @@
       const message = [xSquare * fullCellW, ySquare * fullCellH, fullCellW, fullCellH, color, xSquare, ySquare].join(",");
       drawGridSquare(canvas, color, pageX, pageY, true);
       applyMessage(message);
-      await sendReplay(message);
-      publishRealtime(message);
-      setPagesThatRemain();
-      renderTileSelector();
-      if (getTileStatus(state.selectedTile.row, state.selectedTile.col) === "error") highlightErrors(state.selectedTile.row, state.selectedTile.col);
+      try {
+        await sendReplay(message);
+        publishRealtime(message);
+        setPagesThatRemain();
+        renderTileSelector();
+        if (getTileStatus(state.selectedTile.row, state.selectedTile.col) === "error") highlightErrors(state.selectedTile.row, state.selectedTile.col);
+      } catch (err) {
+        logClient("error", "Student canvas click failed", {
+          error: err.message,
+          stack: err.stack,
+          selectedTile: state.selectedTile,
+          message
+        });
+        setText("tileStatusText", "Save failed. Please click that pixel again.");
+      }
     });
   }
 
@@ -581,6 +617,12 @@
       i++;
     }, delay);
     if (rows.length === 0) clearInterval(state.replayTimer);
+  }
+
+  function adminAnimationDelay(defaultDelay) {
+    const params = new URLSearchParams(window.location.search);
+    const delay = Number(params.get("animationDelayMs"));
+    return Number.isFinite(delay) && delay >= 0 ? delay : defaultDelay;
   }
 
   function orderedRows(rows) {
@@ -789,9 +831,9 @@
       const source = document.getElementById("animationSource").value;
       const order = document.getElementById("animationOrder").value;
       if (source === "finished") {
-        replayRows(completedImageRows(order === "random" ? orderedRows(rows) : rows, order), 5);
+        replayRows(completedImageRows(order === "random" ? orderedRows(rows) : rows, order), adminAnimationDelay(5));
       } else {
-        replayRows(orderedRows(rows), 5);
+        replayRows(orderedRows(rows), adminAnimationDelay(5));
       }
     });
     document.getElementById("adminFinishButton").addEventListener("click", () => {
@@ -802,7 +844,7 @@
         : order === "random"
           ? completedImageRows(orderedRows(state.instance.rows || []), order)
           : completedImageRows(state.instance.rows || [], "existing-then-sequential");
-      replayRows(rows, 1);
+      replayRows(rows, adminAnimationDelay(1));
     });
     document.getElementById("deleteInstanceButton").addEventListener("click", async () => {
       if (!window.confirm("Deactivate this instance? Replay data will be preserved, but students will no longer be able to access it.")) return;

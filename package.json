@@ -7,6 +7,7 @@
     "test": "./test.sh",
     "test:browser": "./browser-test.sh",
     "test:all": "./all-tests.sh",
+    "demo:tetris": "./scripts/demo-tetris.sh",
     "playwright": "playwright test"
   },
   "devDependencies": {

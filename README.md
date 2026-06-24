@@ -149,6 +149,50 @@ If Playwright reports a missing browser, run:
 npx playwright install chromium
 ```
 
+## Tetris Classroom Demo
+
+The client includes a demonstration script that starts the sibling server, starts
+the local client, opens the teacher dashboard, creates a Tetris instance, opens
+three separate student browser windows, and has those students complete the
+Tetris pages one by one. After all pages are complete, it opens the teacher/admin
+page and animates the finished image.
+
+Run it from this client repository:
+
+```bash
+npm install
+npm run demo:tetris
+```
+
+The default pacing is intended for a live demonstration. It usually finishes in
+roughly 5 minutes, depending on machine speed and whether the local servers are
+already running.
+
+Useful timing options:
+
+```bash
+DEMO_PIXEL_DELAY_MS=850 npm run demo:tetris
+DEMO_ADMIN_ANIMATION_DELAY_MS=80 npm run demo:tetris
+DEMO_FINAL_PAUSE_MS=20000 npm run demo:tetris
+```
+
+Useful run-mode options:
+
+```bash
+DEMO_HEADLESS=1 npm run demo:tetris
+DEMO_KEEP_OPEN=1 npm run demo:tetris
+DEMO_CLIENT_PORT=4000 DEMO_SERVER_PORT=8000 npm run demo:tetris
+```
+
+`DEMO_HEADLESS=1` is mainly for checking that the script still works. For a real
+classroom demonstration, leave it unset so the teacher/admin and three student
+Chromium windows are visible.
+
+During the demo, browser-side failures are written to the browser console with a
+`[PixelPandemonium]` prefix. Replay insert failures include the failed URL,
+status, response body, instance code, and pixel payload. Match the response
+`requestId` to the server's structured JSON logs when debugging HTTP failures.
+
 ## Styling Policy
 
 New controls intentionally extend the original DrawingCanvas style:

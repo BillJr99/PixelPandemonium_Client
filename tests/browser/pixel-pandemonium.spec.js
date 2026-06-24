@@ -53,12 +53,14 @@ test("student page validates an instance, auto-selects a tile, submits a wrong p
     return page.evaluate(() => window.PixelPandemonium.__test.getTileStatus(0, 0));
   }).toBe("error");
 
-  const retrieve = await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/retrieve`, {
-    headers: { Origin: "http://localhost:4000" }
-  });
-  expect(retrieve.ok()).toBeTruthy();
-  const rows = await retrieve.json();
-  expect(rows.length).toBeGreaterThan(0);
+  await expect.poll(async () => {
+    const retrieve = await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/retrieve`, {
+      headers: { Origin: "http://localhost:4000" }
+    });
+    expect(retrieve.ok()).toBeTruthy();
+    const rows = await retrieve.json();
+    return rows.length;
+  }).toBeGreaterThan(0);
 });
 
 test("replay page loads instance data and auto-finish controls", async ({ page, request }) => {
