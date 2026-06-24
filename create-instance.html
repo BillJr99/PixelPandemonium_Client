@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Pixel Pandemonium Create Instance</title>
+  <link href="assets/css/drawingcanvas.css" rel="stylesheet">
+  <script src="assets/js/pixel-pandemonium.js"></script>
+</head>
+<body>
+  <table width="100%" border="0" cellspacing="0" cellpadding="4">
+    <tr>
+      <td colspan="9" class="topLevelBody">
+        <div align="center">
+          <span style="font-size:24px;"><strong>Pixel Pandemonium</strong></span> - Create Instance<br>
+          <strong>Jeffrey L. Popyack/Drexel University, William M. Mongan/Ursinus College</strong>
+        </div>
+      </td>
+    </tr>
+  </table>
+  <ul class="pp-nav">
+    <li><a href="index.html">Pixel Pandemonium</a></li>
+    <li><a href="create-instance.html">Create Instance</a></li>
+    <li><a href="teacher-dashboard.html">Administer Instance</a></li>
+  </ul>
+  <div class="page-wrap" id="teacherCreateContent" style="display:none;">
+    <h1>Create Instance</h1>
+    <div class="panel">
+      <h2>Create an Instance</h2>
+      <form id="createForm">
+        <div class="form-grid">
+          <label for="creationMode">Picture Source</label>
+          <select id="creationMode">
+            <option value="static">Configured picture</option>
+            <option value="spec">Upload posterizer specs</option>
+            <option value="image">Upload GIF/image</option>
+          </select>
+          <label for="pictureId">Picture</label>
+          <select id="pictureId" required></select>
+          <label for="instanceName">Instance Name</label>
+          <input id="instanceName" placeholder="Optional unique name">
+          <label for="customTitle">Custom Picture Title</label>
+          <input id="customTitle" placeholder="My custom poster">
+          <label for="specFiles">Posterizer Files</label>
+          <input id="specFiles" type="file" multiple accept=".js,.csv,.txt,.html">
+          <label for="imageFile">GIF/Image</label>
+          <input id="imageFile" type="file" accept="image/gif,image/png,image/jpeg,image/webp">
+          <label for="dimensionPreset">Output Dimensions</label>
+          <select id="dimensionPreset"></select>
+          <label for="customWidth">Custom Width</label>
+          <input id="customWidth" type="number" min="1" step="1">
+          <label for="customHeight">Custom Height</label>
+          <input id="customHeight" type="number" min="1" step="1">
+          <label for="paletteEditor">Palette</label>
+          <textarea id="paletteEditor" rows="4" placeholder="One RGB color per line, for example: 255,255,255"></textarea>
+          <span></span>
+          <p>
+            <button type="button" id="analyzeCustomButton">Analyze Custom Picture</button>
+            <button type="button" id="remapPaletteButton">Remap Palette</button>
+          </p>
+          <label for="teacherName">Teacher Name</label>
+          <input id="teacherName" required>
+          <label for="dateTime">Date/Time</label>
+          <input id="dateTime" type="datetime-local" required>
+          <label for="expirationDays">Expiration Days</label>
+          <input id="expirationDays" type="number" min="1" step="1" required>
+        </div>
+        <p><button type="submit">Create Instance</button></p>
+      </form>
+      <div id="customPictureStatus"></div>
+      <canvas id="customPreviewCanvas" width="300" height="180" style="display:none; border:1px solid #999;"></canvas>
+      <div id="createResult"></div>
+    </div>
+  </div>
+  <script>PixelPandemonium.initCreateInstance();</script>
+</body>
+</html>

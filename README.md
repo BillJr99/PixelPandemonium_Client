@@ -73,6 +73,7 @@ http://127.0.0.1:4000
 Common pages:
 
 ```text
+http://127.0.0.1:4000/create-instance.html
 http://127.0.0.1:4000/teacher-dashboard.html
 http://127.0.0.1:4000/admin.html?instance=INSTANCE-CODE&admin=ADMIN-CODE
 http://127.0.0.1:4000/instructions.html?instance=INSTANCE-CODE
@@ -90,14 +91,18 @@ Create or review the server `.env`:
 
 ```bash
 ADMIN_PASSWORD=admin
+DEFAULT_TEACHER_KEY=teacher
 DOWNLOAD_TOKEN=change-me-before-deploying
 AUTH_FAILURE_LIMIT=5
 AUTH_FAILURE_WINDOW_MINUTES=10
 AUTH_BAN_DAYS=1
 ```
 
-- `ADMIN_PASSWORD` is required for teacher/admin operations such as reset,
-  deactivate, replay-row editing, custom picture upload, and admin inspection.
+- `ADMIN_PASSWORD` is required for the admin page and admin-only APIs.
+- `DEFAULT_TEACHER_KEY` is the first global teacher key seeded by the server.
+  Teachers need a global teacher key to create instances or list/administer
+  non-demo instances. Without one, the teacher dashboard can only work with the
+  public Tetris demo.
 - `DOWNLOAD_TOKEN` is used only for the protected `/download` replay-data export.
 - `AUTH_FAILURE_LIMIT`, `AUTH_FAILURE_WINDOW_MINUTES`, and `AUTH_BAN_DAYS`
   control server-side temporary IP bans after repeated bad class keys, teacher
@@ -122,7 +127,8 @@ Also confirm these server/client settings:
 
 ### 2. Create An Instance From An Existing Picture
 
-1. Open `teacher-dashboard.html`.
+1. Open `create-instance.html`.
+2. Enter the global teacher key when prompted. The local default is `teacher`.
 2. Leave `Picture Source` set to `Configured picture`.
 3. Pick a picture, optionally enter a unique instance name, then enter teacher
    name, date/time, and expiration days. The default expiration is 12 months.
@@ -145,11 +151,11 @@ The main page links directly to the public Tetris demo:
 - `teacher-dashboard.html?instance=tetris` lets a teacher reset the demo.
 
 The public Tetris demo does not require class or teacher keys. It cannot be
-deactivated or deleted.
+deleted or deactivated.
 
 ### 3. Create An Instance From Existing Posterizer Specs
 
-1. Open `teacher-dashboard.html?adminPassword=YOUR_ADMIN_PASSWORD`.
+1. Open `create-instance.html` and enter the global teacher key when prompted.
 2. Set `Picture Source` to `Upload posterizer specs`.
 3. Enter a custom title.
 4. Upload a complete `Post-It_*_composite.js`, or upload composite CSV plus a
@@ -166,7 +172,7 @@ list.
 
 ### 4. Create An Instance From A GIF Or Image
 
-1. Open `teacher-dashboard.html?adminPassword=YOUR_ADMIN_PASSWORD`.
+1. Open `create-instance.html` and enter the global teacher key when prompted.
 2. Set `Picture Source` to `Upload GIF/image`.
 3. Upload a GIF, PNG, JPEG, or WebP.
 4. Choose an output dimension. The menu is derived from dimensions already used
@@ -221,25 +227,41 @@ The admin page has additional animation controls:
 
 ### 7. Admin Page
 
-Open the generated admin URL and provide the server `ADMIN_PASSWORD` when
-prompted, or include `adminPassword=...` in the URL for local demos.
+Open `admin.html` and provide the server `ADMIN_PASSWORD` when prompted, or
+include `adminPassword=...` in the URL for local demos. Without an instance in
+the URL, the admin page does not prompt for an instance code; after the password
+is accepted, it lists active instances and lets you choose one to work with. A
+generated admin URL still opens that specific instance directly.
 
-If the teacher key is missing from a teacher/admin URL, the client prompts for
-it, adds `teacherKey=...` to the current URL, and resumes loading. If the
-teacher key is incorrect, the client prompts again and retries once. The server
-enforces the teacher key on reset, admin inspection, row edit/delete,
-deactivation, and key rotation API calls, except for resetting the built-in
+If a generated teacher/admin URL is missing its per-instance teacher key, the
+client prompts for it, adds `teacherKey=...` to the current URL, and resumes
+loading. If the teacher key is incorrect, the client prompts again and retries
+once. The server enforces the teacher key on reset, admin inspection, row
+edit/delete, and key rotation API calls, except for resetting the built-in
 public Tetris demo.
+
+The teacher dashboard has two top-level workflows:
+
+- `Create Instance` opens `create-instance.html`, which requires a valid global
+  teacher key and is the only teacher-facing place to create new class
+  instances.
+- `Administer Instance` opens `teacher-dashboard.html`, which lists, views,
+  animates, and resets existing instances after a valid global teacher key is
+  provided. Without a global teacher key, it can only load, view, and reset the
+  public Tetris demo.
 
 Admin tools include:
 
 - Active instance listing with links to the student and replay pages.
+- In-place switching between active instances.
+- Configured-picture instance creation.
+- Teacher key listing and creation. Duplicate global teacher keys, including
+  the default `teacher` key, are rejected.
 - Student and replay links.
 - Teacher dashboard link.
 - Incomplete page and mistake summaries.
 - Replay row refresh, edit, and delete.
 - Instance reset.
-- Instance deactivation.
 - Class key reset, which invalidates old student/replay links.
 - Teacher key reset, which invalidates old teacher/admin links and updates the
   current admin URL.
@@ -275,7 +297,7 @@ For GitHub Pages, the server must be deployed separately. The static client cann
 
 ## Use Cases
 
-- Teacher opens `teacher-dashboard.html`.
+- Teacher opens `create-instance.html` with a global teacher key.
 - Teacher selects a picture, enters name/date/time, and creates an instance.
 - Teacher can instead choose `Upload posterizer specs`, provide outside
   posterizer files, review the generated spec, and create an instance from the
@@ -297,19 +319,23 @@ For GitHub Pages, the server must be deployed separately. The static client cann
 - Teacher opens the replay URL and sees the image rebuild from replay data.
 - Teacher can control replay animation speed and sequential/random order.
 - Teacher can auto-finish the replay from the expected image data.
-- Teacher can reset an instance with the admin URL/code.
+- Teacher opens `teacher-dashboard.html` to list, view, animate, and reset
+  existing instances. Without a global teacher key, only the public Tetris demo
+  can be viewed and reset.
 - Teacher/admin can rotate the class key or teacher key from the admin page.
 - Admin page shows incomplete pages and pages with mistakes.
 - Teacher dashboard and admin page can list existing instances and open the
   public Tetris demo animation.
+- Admin page can create new configured-picture instances after admin-password
+  login.
 - Admin page can edit or delete individual replay rows.
-- Admin page can deactivate an instance. Deactivation preserves replay rows but makes the instance unavailable to students and normal replay/status pages.
+- Instances cannot be deleted or deactivated from the client.
 - Admin page can generate a time-lapse from instance data in student completion order or random order.
 - Admin page can generate a finished-product time-lapse even if the activity is incomplete, using existing student work first and then filling missing pixels sequentially or randomly.
 - Multiple teachers can run the same picture at once because all data is instance-scoped.
 - The public Tetris demo is always available at `instance=tetris`, accepts
   student contributions without a key, can be reset by teachers without a key,
-  and cannot be deactivated.
+  and cannot be deleted or deactivated.
 
 ## Custom Picture Workflow
 
@@ -383,9 +409,10 @@ All client tests:
 The smoke harness reads `config.yaml`, starts the sibling server when available,
 verifies required files and feature hooks, creates static and custom server
 instances, and runs a Jekyll build if Jekyll is installed. Browser tests use
-Playwright to exercise the teacher dashboard, spec-first and image-first custom
+Playwright to exercise the create-instance page, teacher dashboard,
+spec-first and image-first custom
 creation, incomplete spec validation, student tile submission, amber error
-state, replay, auto-finish, admin reset/deactivation/data editing flows, and
+state, replay, auto-finish, admin reset/data editing flows, and
 generated URLs.
 
 Manual user-level test scenarios are in `docs/USER_LEVEL_TESTS.md`.

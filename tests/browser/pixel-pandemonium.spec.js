@@ -11,7 +11,8 @@ async function createInstance(request, teacherName = "Browser Test", pictureId =
       pictureId,
       teacherName: uniqueTeacherName,
       dateTime: "2026-06-23T14:00:00",
-      expirationHours: 1
+      expirationHours: 1,
+      teacherAccessKey: "teacher"
     }
   });
   expect(response.ok()).toBeTruthy();
@@ -19,8 +20,8 @@ async function createInstance(request, teacherName = "Browser Test", pictureId =
 }
 
 test("teacher dashboard creates an instance and renders URLs plus QR codes", async ({ page }) => {
-  await page.goto("/teacher-dashboard.html");
-  await expect(page.getByRole("heading", { name: "Teacher Dashboard" })).toBeVisible();
+  await page.goto("/create-instance.html?teacherAccessKey=teacher");
+  await expect(page.getByRole("heading", { name: "Create Instance" })).toBeVisible();
 
   await page.locator("#pictureId").selectOption("tetris");
   await page.locator("#instanceName").fill("browser-" + Math.random().toString(36).slice(2, 8));
@@ -41,7 +42,7 @@ test("teacher dashboard creates an instance and renders URLs plus QR codes", asy
 
 test("teacher dashboard rejects duplicate instance names", async ({ page }) => {
   const instanceName = "duplicate-" + Math.random().toString(36).slice(2, 8);
-  await page.goto("/teacher-dashboard.html");
+  await page.goto("/create-instance.html?teacherAccessKey=teacher");
   await page.locator("#pictureId").selectOption("tetris");
   await page.locator("#instanceName").fill(instanceName);
   await page.locator("#teacherName").fill("Duplicate First");
@@ -50,7 +51,7 @@ test("teacher dashboard rejects duplicate instance names", async ({ page }) => {
   await page.getByRole("button", { name: "Create Instance" }).click();
   await expect(page.locator("#createResult")).toContainText("Instance created");
 
-  await page.goto("/teacher-dashboard.html");
+  await page.goto("/create-instance.html?teacherAccessKey=teacher");
   await page.locator("#pictureId").selectOption("tetris");
   await page.locator("#instanceName").fill(instanceName);
   await page.locator("#teacherName").fill("Duplicate Second");
@@ -61,7 +62,7 @@ test("teacher dashboard rejects duplicate instance names", async ({ page }) => {
 });
 
 test("teacher dashboard rejects the reserved tetris instance name", async ({ page }) => {
-  await page.goto("/teacher-dashboard.html");
+  await page.goto("/create-instance.html?teacherAccessKey=teacher");
   await page.locator("#pictureId").selectOption("tetris");
   await page.locator("#instanceName").fill("tetris");
   await page.locator("#teacherName").fill("Reserved Name");
@@ -72,7 +73,7 @@ test("teacher dashboard rejects the reserved tetris instance name", async ({ pag
 });
 
 test("teacher dashboard creates an instance from uploaded posterizer spec files", async ({ page }) => {
-  await page.goto("/teacher-dashboard.html?adminPassword=admin");
+  await page.goto("/create-instance.html?teacherAccessKey=teacher");
   await page.locator("#creationMode").selectOption("spec");
   await page.locator("#customTitle").fill("Browser Spec Custom");
   await page.locator("#specFiles").setInputFiles(path.join(process.cwd(), "files/drawingcanvas-tetris/Post-It_tetris_composite.js"));
@@ -93,7 +94,7 @@ test("teacher dashboard creates an instance from uploaded posterizer spec files"
 });
 
 test("teacher dashboard creates an image-first instance with dimension and palette remapping", async ({ page }) => {
-  await page.goto("/teacher-dashboard.html?adminPassword=admin");
+  await page.goto("/create-instance.html?teacherAccessKey=teacher");
   await expect(await page.evaluate(() => window.PixelPandemonium.__test.fitAspectDimensions(576, 216, 100, 36))).toEqual({ width: 96, height: 36 });
   await expect(await page.evaluate(() => window.PixelPandemonium.__test.fitAspectGridDimensions(576, 216, 100, 36))).toEqual({ width: 95, height: 36 });
   await page.locator("#creationMode").selectOption("image");
@@ -123,7 +124,7 @@ test("teacher dashboard creates an image-first instance with dimension and palet
 });
 
 test("teacher dashboard blocks incomplete spec uploads with missing-data guidance", async ({ page }) => {
-  await page.goto("/teacher-dashboard.html?adminPassword=admin");
+  await page.goto("/create-instance.html?teacherAccessKey=teacher");
   await page.locator("#creationMode").selectOption("spec");
   await page.locator("#customTitle").fill("Incomplete Custom");
   await page.locator("#specFiles").setInputFiles(path.join(process.cwd(), "files/drawingcanvas-tetris/ColorMap_tetris.txt"));
@@ -196,20 +197,37 @@ test("admin page reprompts when the teacher key is incorrect", async ({ page, re
   await expect(page).toHaveURL(new RegExp("teacherKey=" + instance.teacherKey));
 });
 
-test("admin page prompts for missing instance and admin code", async ({ page, request }) => {
-  const instance = await createInstance(request, "Admin Missing Codes", "eagles");
+test("admin page without an instance prompts only for the admin password and lists instances", async ({ page, request }) => {
+  const instance = await createInstance(request, "Admin Listing Flow", "eagles");
   const prompts = [];
   page.on("dialog", async (dialog) => {
     prompts.push(dialog.message());
-    if (/instance code/i.test(dialog.message())) await dialog.accept(instance.instanceCode);
-    else if (/admin code/i.test(dialog.message())) await dialog.accept(instance.adminCode);
-    else if (/teacher access key/i.test(dialog.message())) await dialog.accept(instance.teacherKey);
-    else await dialog.accept("");
+    await dialog.accept("admin");
   });
-  await page.goto("/admin.html?adminPassword=admin");
+  await page.goto("/admin.html");
+  await expect(page.locator("#adminStatus")).toContainText("Choose an instance or create a new one");
+  await expect(page.locator("#instancesList")).toContainText(instance.instanceCode);
+  expect(prompts).toHaveLength(1);
+  expect(prompts[0]).toContain("admin password");
+  await page.locator("#instancesList tr", { hasText: instance.instanceCode }).locator('button[data-action="load-instance"]').click();
   await expect(page.locator("#adminStatus")).toContainText("Admin access loaded");
-  expect(prompts.some((message) => /instance code/i.test(message))).toBeTruthy();
-  expect(prompts.some((message) => /admin code/i.test(message))).toBeTruthy();
+  await expect(page.locator("#instanceCode")).toContainText(instance.instanceCode);
+
+  await page.locator("#adminPictureId").selectOption("eagles");
+  await page.locator("#adminInstanceName").fill("admin-created-" + Math.random().toString(36).slice(2, 8));
+  await page.locator("#adminTeacherName").fill("Admin Created");
+  await page.locator("#adminDateTime").fill("2026-06-23T17:00");
+  await page.locator("#adminExpirationDays").fill("365");
+  await page.getByRole("button", { name: "Create Instance" }).click();
+  await expect(page.locator("#adminCreateResult")).toContainText("Instance created");
+  await expect(page.locator("#adminStatus")).toContainText("Admin access loaded");
+
+  await page.getByRole("button", { name: "Load Teacher Keys" }).click();
+  await expect(page.locator("#teacherKeysList")).toContainText("teacher");
+  await page.locator("#newTeacherKey").fill("teacher");
+  await page.locator("#newTeacherKeyLabel").fill("Duplicate Default");
+  await page.getByRole("button", { name: "Create Teacher Key" }).click();
+  await expect(page.locator("#teacherKeyStatus")).toContainText("Teacher key already exists");
 });
 
 test("replay page loads instance data and auto-finish controls", async ({ page, request }) => {
@@ -244,7 +262,7 @@ test("dashboard reset clears only the selected instance", async ({ page, request
     data: { data: "0,0,10,10,#000000,0,0", accessKey: second.accessKey }
   });
 
-  await page.goto(`/teacher-dashboard.html?instance=${encodeURIComponent(first.instanceCode)}&teacherKey=${encodeURIComponent(first.teacherKey)}&admin=${encodeURIComponent(first.adminCode)}&adminPassword=admin`);
+  await page.goto(`/teacher-dashboard.html?instance=${encodeURIComponent(first.instanceCode)}&teacherKey=${encodeURIComponent(first.teacherKey)}&admin=${encodeURIComponent(first.adminCode)}&teacherAccessKey=teacher`);
   await expect(page.locator("#resetInstanceCode")).toHaveValue(first.instanceCode);
   await expect(page.locator("#resetAdminCode")).toHaveValue(first.adminCode);
   await expect(page.locator("#resetTeacherKey")).toHaveValue(first.teacherKey);
@@ -268,7 +286,7 @@ test("dashboard reset clears only the selected instance", async ({ page, request
   expect(secondRows.length).toBeGreaterThan(0);
 });
 
-test("admin page edits rows, reports incomplete and mistake pages, animates, and deactivates without deleting data", async ({ page, request }) => {
+test("admin page edits rows, reports incomplete and mistake pages, and animates", async ({ page, request }) => {
   const instance = await createInstance(request, "Admin Flow");
   await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/insert`, {
     headers: { Origin: "http://localhost:4000" },
@@ -306,17 +324,10 @@ test("admin page edits rows, reports incomplete and mistake pages, animates, and
   await page.locator("#animationOrder").selectOption("random");
   await page.getByRole("button", { name: "Animate Finished Image" }).click();
 
-  page.once("dialog", async (dialog) => {
-    expect(dialog.message()).toContain("Deactivate this instance");
-    await dialog.accept();
-  });
-  await page.getByRole("button", { name: "Deactivate Instance" }).click();
-  await expect(page.locator("#adminStatus")).toContainText("Instance deactivated");
-
   const status = await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/status?key=${encodeURIComponent(instance.accessKey)}`, {
     headers: { Origin: "http://localhost:4000" }
   });
-  expect(status.status()).toBe(404);
+  expect(status.ok()).toBeTruthy();
 
   const legacyRows = await (await request.get(`http://127.0.0.1:8000/retrieve?name=${encodeURIComponent(instance.instanceCode)}`, {
     headers: { Origin: "http://localhost:4000" }
@@ -324,7 +335,7 @@ test("admin page edits rows, reports incomplete and mistake pages, animates, and
   expect(legacyRows.length).toBeGreaterThan(0);
 });
 
-test("public tetris demo is open to students and teacher reset but cannot be deactivated", async ({ page, request }) => {
+test("public tetris demo is open to students and teacher reset", async ({ page, request }) => {
   await page.goto("/instructions.html?instance=tetris");
   await expect(page.locator("#pictureTitle")).toContainText("Tetris");
 
@@ -339,11 +350,7 @@ test("public tetris demo is open to students and teacher reset but cannot be dea
 
   await page.goto("/admin.html?instance=tetris");
   await expect(page.locator("#adminStatus")).toContainText("Admin access loaded");
-  page.once("dialog", async (dialog) => {
-    await dialog.accept();
-  });
-  await page.getByRole("button", { name: "Deactivate Instance" }).click();
-  await expect(page.locator("#adminStatus")).toContainText("public Tetris demo cannot be deactivated");
+  await expect(page.getByRole("button", { name: "Deactivate Instance" })).toHaveCount(0);
 });
 
 test("admin page rotates class and teacher keys for secured instances", async ({ page, request }) => {

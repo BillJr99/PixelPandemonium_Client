@@ -177,6 +177,31 @@
     return "&adminPassword=" + encodeURIComponent(adminPassword());
   }
 
+  function teacherAccessKey() {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("teacherAccessKey");
+    if (fromUrl) {
+      window.sessionStorage.setItem("pixelPandemoniumTeacherAccessKey", fromUrl);
+      return fromUrl;
+    }
+    const cached = window.sessionStorage.getItem("pixelPandemoniumTeacherAccessKey");
+    if (cached) return cached;
+    const entered = window.prompt("Enter the Pixel Pandemonium teacher key:");
+    if (entered) window.sessionStorage.setItem("pixelPandemoniumTeacherAccessKey", entered);
+    return entered || "";
+  }
+
+  async function ensureTeacherAccess() {
+    const key = teacherAccessKey();
+    const res = await fetch(serverUrl("/teacher/validate?teacherAccessKey=" + encodeURIComponent(key)));
+    const data = await res.json();
+    if (!res.ok || !data.valid) {
+      window.sessionStorage.removeItem("pixelPandemoniumTeacherAccessKey");
+      throw new Error(data.error || "Invalid teacher key");
+    }
+    return key;
+  }
+
   function isTetrisDemoCode(code) {
     return String(code || "").toLowerCase() === "tetris";
   }
@@ -226,7 +251,8 @@
 
   async function validateAdminInstance(retried) {
     const params = new URLSearchParams(window.location.search);
-    const code = params.get("instance") || promptForUrlValue("instance", "Enter the instance code:", "Missing instance code.");
+    const code = params.get("instance");
+    if (!code) return null;
     const admin = params.get("admin") || (isTetrisDemoCode(code) ? "tetris-demo" : promptForUrlValue("admin", "Enter the admin code:", "Missing admin code."));
     const teacherKey = params.get("teacherKey") || "";
     if (!clientValidateCheckDigit(code)) showFatal("Invalid instance code. Please double-check the URL.");
@@ -1222,7 +1248,7 @@
     const res = await fetch(serverUrl("/pictures/custom"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...customDraft, adminPassword: adminPassword() })
+      body: JSON.stringify({ ...customDraft, teacherAccessKey: teacherAccessKey() })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Custom picture upload failed");
@@ -1232,6 +1258,9 @@
 
   async function initDashboard() {
     await loadConfig();
+    await ensureTeacherAccess();
+    const createContent = document.getElementById("teacherCreateContent");
+    if (createContent) createContent.style.display = "block";
     priorDimensions = [[state.subcols, state.subrows]];
     populateDimensionPresets();
     loadPriorDimensions().then(() => {
@@ -1253,7 +1282,7 @@
     document.getElementById("dateTime").value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
     const params = new URLSearchParams(window.location.search);
-    if (params.get("instance")) {
+    if (params.get("instance") && document.getElementById("resetInstanceCode")) {
       document.getElementById("resetInstanceCode").value = params.get("instance");
       document.getElementById("resetAdminCode").value = params.get("admin") || (isTetrisDemoCode(params.get("instance")) ? "tetris-demo" : "");
       document.getElementById("resetTeacherKey").value = params.get("teacherKey") || "";
@@ -1324,7 +1353,10 @@
     document.getElementById("remapPaletteButton").addEventListener("click", async () => {
       try {
         customDraft = null;
-        await analyzeCustomPicture();
+        const draft = await analyzeCustomPicture();
+        if (draft && draft.spec) {
+          setHtml("customPictureStatus", document.getElementById("customPictureStatus").innerHTML.replace("Custom picture ready:", "Palette remapped. Custom picture ready:"));
+        }
       } catch (err) {
         setHtml("customPictureStatus", '<p class="error">' + err.message + "</p>");
       }
@@ -1341,7 +1373,8 @@
           instanceName: document.getElementById("instanceName").value,
           teacherName: document.getElementById("teacherName").value,
           dateTime: document.getElementById("dateTime").value,
-          expirationHours: Number(document.getElementById("expirationDays").value) * 24
+          expirationHours: Number(document.getElementById("expirationDays").value) * 24,
+          teacherAccessKey: teacherAccessKey()
         };
         const res = await fetch(serverUrl("/instance/create"), {
           method: "POST",
@@ -1359,6 +1392,7 @@
       }
     });
 
+    if (!document.getElementById("resetForm")) return;
     document.getElementById("resetForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const code = document.getElementById("resetInstanceCode").value;
@@ -1379,6 +1413,7 @@
 
     instanceListMode = "dashboard";
     attachInstanceListHandlers();
+    if (!document.getElementById("adminReplayButton")) return;
     document.getElementById("adminReplayButton").addEventListener("click", async () => {
       try {
         await runAdminAnimation(false);
@@ -1401,7 +1436,11 @@
   }
 
   async function adminFetchRows() {
-    const passwordQuery = isTetrisDemoCode(state.instance.instanceCode) ? "" : adminQuery();
+    const passwordQuery = isTetrisDemoCode(state.instance.instanceCode)
+      ? ""
+      : instanceListMode === "dashboard"
+        ? "&teacherAccessKey=" + encodeURIComponent(teacherAccessKey())
+        : adminQuery();
     const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/admin?admin=" + encodeURIComponent(state.instance.adminCode) + "&teacherKey=" + encodeURIComponent(state.instance.teacherKey || "") + passwordQuery));
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Admin fetch failed");
@@ -1459,15 +1498,22 @@
   }
 
   function updateAdminLinks() {
-    document.getElementById("studentLink").href = state.instance.studentUrl;
-    document.getElementById("studentLink").textContent = state.instance.studentUrl;
-    document.getElementById("replayLink").href = state.instance.replayUrl;
-    document.getElementById("replayLink").textContent = state.instance.replayUrl;
+    if (!state.instance) return;
+    document.getElementById("studentLink").href = state.instance.studentUrl || "#";
+    document.getElementById("studentLink").textContent = state.instance.studentUrl || "";
+    document.getElementById("replayLink").href = state.instance.replayUrl || "#";
+    document.getElementById("replayLink").textContent = state.instance.replayUrl || "";
     const teacherLink = document.getElementById("teacherLink");
     if (teacherLink) {
-      teacherLink.href = state.instance.teacherUrl;
-      teacherLink.textContent = state.instance.teacherUrl;
+      teacherLink.href = state.instance.teacherUrl || "#";
+      teacherLink.textContent = state.instance.teacherUrl || "";
     }
+  }
+
+  function showAdminContent() {
+    setHtml("adminAuthStatus", "");
+    const content = document.getElementById("adminContent");
+    if (content) content.style.display = "block";
   }
 
   function tetrisDemoInstance() {
@@ -1507,7 +1553,7 @@
         "<td>" + htmlEscape(instance.pictureTitle || instance.pictureId) + "</td>",
         "<td>" + htmlEscape(instance.teacherName || "") + "</td>",
         "<td>" + htmlEscape(instance.expiresAt || "") + "</td>",
-        '<td><button type="button" data-action="load-instance" data-index="' + index + '">' + (instanceListMode === "admin" ? "Open Admin" : "Load") + "</button> " +
+        '<td><button type="button" data-action="load-instance" data-index="' + index + '">Load</button> ' +
           '<a href="' + htmlEscape(instance.studentUrl || "") + '" target="_blank">Student</a> ' +
           '<a href="' + htmlEscape(instance.replayUrl || "") + '" target="_blank">Replay</a></td>',
         "</tr>"
@@ -1517,9 +1563,16 @@
     setHtml("instancesList", rows.join(""));
   }
 
-  async function loadExistingInstances() {
-    const res = await fetch(serverUrl("/instances?adminPassword=" + encodeURIComponent(adminPassword())));
+  async function loadExistingInstances(retried) {
+    const endpoint = instanceListMode === "admin"
+      ? "/instances?adminPassword=" + encodeURIComponent(adminPassword())
+      : "/teacher/instances?teacherAccessKey=" + encodeURIComponent(teacherAccessKey());
+    const res = await fetch(serverUrl(endpoint));
     const data = await res.json();
+    if (res.status === 403 && instanceListMode === "admin" && !retried) {
+      window.sessionStorage.removeItem("pixelPandemoniumAdminPassword");
+      return loadExistingInstances(true);
+    }
     if (!res.ok) throw new Error(data.error || "Could not load instances");
     state.instances = data.instances || [];
     renderInstancesList(state.instances);
@@ -1537,6 +1590,157 @@
     document.getElementById("resetAdminCode").value = state.instance.adminCode || "";
     document.getElementById("resetTeacherKey").value = state.instance.teacherKey || "";
     setHtml("dashboardAdminStatus", '<p class="ok">Loaded ' + htmlEscape(state.instance.instanceName || state.instance.instanceCode) + ".</p>");
+  }
+
+  function mergeAdminInstance(instance, adminData) {
+    return {
+      ...instance,
+      ...adminData,
+      instanceCode: adminData.instanceCode || instance.instanceCode,
+      adminCode: adminData.adminCode || instance.adminCode || (isTetrisDemoCode(instance.instanceCode) ? "tetris-demo" : ""),
+      teacherKey: adminData.teacherKey || instance.teacherKey || "",
+      accessKey: adminData.accessKey || instance.accessKey || ""
+    };
+  }
+
+  async function loadAdminInstance(instance, updateUrl) {
+    state.instance = {
+      ...instance,
+      adminCode: instance.adminCode || (isTetrisDemoCode(instance.instanceCode) ? "tetris-demo" : ""),
+      teacherKey: instance.teacherKey || "",
+      accessKey: instance.accessKey || ""
+    };
+    const passwordQuery = isTetrisDemoCode(state.instance.instanceCode) ? "" : adminQuery();
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/admin?admin=" + encodeURIComponent(state.instance.adminCode) + "&teacherKey=" + encodeURIComponent(state.instance.teacherKey || "") + passwordQuery));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Admin fetch failed");
+    state.instance = mergeAdminInstance(state.instance, data);
+    await loadPicture(state.instance.pictureId);
+    setText("pictureTitle", state.picture.title);
+    setText("instanceCode", state.instance.instanceCode);
+    updateAdminLinks();
+    renderAdminRows(data.rows || []);
+    resetFilled();
+    (data.rows || []).forEach((row) => applyMessage(row.DATA));
+    state.instance.rows = data.rows || [];
+    renderAdminTileSummary();
+    makeReplayGrid();
+    rowsFromFilled().forEach((row) => drawReplayMessage(row.DATA));
+    if (updateUrl) {
+      const params = new URLSearchParams(window.location.search);
+      params.set("instance", state.instance.instanceCode);
+      if (state.instance.adminCode) params.set("admin", state.instance.adminCode);
+      else params.delete("admin");
+      if (state.instance.teacherKey) params.set("teacherKey", state.instance.teacherKey);
+      else params.delete("teacherKey");
+      window.history.replaceState(null, "", window.location.pathname + "?" + params.toString() + window.location.hash);
+    }
+    setHtml("adminStatus", '<p class="ok">Admin access loaded for ' + htmlEscape(state.instance.teacherName || state.instance.instanceCode) + ".</p>");
+  }
+
+  function populateAdminCreateForm() {
+    const pictureSelect = document.getElementById("adminPictureId");
+    if (!pictureSelect || pictureSelect.options.length) return;
+    state.config.pictures.forEach((pic) => {
+      const option = document.createElement("option");
+      option.value = pic.id;
+      option.textContent = pic.title;
+      pictureSelect.appendChild(option);
+    });
+    document.getElementById("adminExpirationDays").value = Math.max(1, Math.round(Number(state.config.default_expiration_hours || 8760) / 24));
+    document.getElementById("adminDateTime").value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+
+  function renderAdminCreatedInstance(data) {
+    setHtml("adminCreateResult", [
+      '<p class="ok">Instance created.</p>',
+      '<p><strong>Instance Code:</strong> <span class="mono">' + htmlEscape(data.instanceCode) + "</span></p>",
+      '<p><strong>Instance Name:</strong> <span class="mono">' + htmlEscape(data.instanceName || data.instanceCode) + "</span></p>",
+      '<label>Student URL<br><input class="url-box" readonly value="' + htmlEscape(data.studentUrl || "") + '"></label>',
+      '<br><label>Replay URL<br><input class="url-box" readonly value="' + htmlEscape(data.replayUrl || "") + '"></label>',
+      '<br><label>Teacher URL<br><input class="url-box" readonly value="' + htmlEscape(data.teacherUrl || "") + '"></label>',
+      '<br><label>Admin URL<br><input class="url-box" readonly value="' + htmlEscape(data.adminUrl || "") + '"></label>'
+    ].join(""));
+  }
+
+  function attachAdminCreateHandler() {
+    const form = document.getElementById("adminCreateForm");
+    if (!form) return;
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const body = {
+          pictureId: document.getElementById("adminPictureId").value,
+          instanceName: document.getElementById("adminInstanceName").value,
+          teacherName: document.getElementById("adminTeacherName").value,
+          dateTime: document.getElementById("adminDateTime").value,
+          expirationHours: Number(document.getElementById("adminExpirationDays").value) * 24,
+          adminPassword: adminPassword()
+        };
+        const res = await fetch(serverUrl("/instance/create"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setHtml("adminCreateResult", '<p class="error">' + (data.error || "Create failed") + "</p>");
+          return;
+        }
+        renderAdminCreatedInstance(data);
+        await loadExistingInstances();
+        await loadAdminInstance(data, true);
+      } catch (err) {
+        setHtml("adminCreateResult", '<p class="error">' + err.message + "</p>");
+      }
+    });
+  }
+
+  async function loadTeacherKeys() {
+    const res = await fetch(serverUrl("/teacher-keys?adminPassword=" + encodeURIComponent(adminPassword())));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Could not load teacher keys");
+    const rows = (data.teacherKeys || []).map((key) => "<tr><td class=\"mono\">" + htmlEscape(key.teacherKey) + "</td><td>" + htmlEscape(key.label || "") + "</td><td>" + htmlEscape(key.createdAt || "") + "</td></tr>");
+    setHtml("teacherKeysList", rows.length ? '<table class="admin-table"><thead><tr><th>Key</th><th>Label</th><th>Created</th></tr></thead><tbody>' + rows.join("") + "</tbody></table>" : "<p>No teacher keys found.</p>");
+  }
+
+  function attachTeacherKeyHandlers() {
+    const loadButton = document.getElementById("loadTeacherKeysButton");
+    if (loadButton) {
+      loadButton.addEventListener("click", async () => {
+        try {
+          await loadTeacherKeys();
+        } catch (err) {
+          setHtml("teacherKeyStatus", '<p class="error">' + err.message + "</p>");
+        }
+      });
+    }
+    const form = document.getElementById("teacherKeyForm");
+    if (form) {
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        try {
+          const res = await fetch(serverUrl("/teacher-keys"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              teacherKey: document.getElementById("newTeacherKey").value,
+              label: document.getElementById("newTeacherKeyLabel").value,
+              adminPassword: adminPassword()
+            })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setHtml("teacherKeyStatus", '<p class="error">' + (data.error || "Teacher key creation failed") + "</p>");
+            return;
+          }
+          setHtml("teacherKeyStatus", '<p class="ok">Teacher key created.</p>');
+          await loadTeacherKeys();
+        } catch (err) {
+          setHtml("teacherKeyStatus", '<p class="error">' + err.message + "</p>");
+        }
+      });
+    }
   }
 
   async function runAdminAnimation(finishOnly) {
@@ -1566,14 +1770,11 @@
     const tetrisButton = document.getElementById("loadTetrisDemoButton");
     if (tetrisButton) {
       tetrisButton.addEventListener("click", async () => {
-        if (instanceListMode === "admin") {
-          window.location.href = "admin.html?instance=tetris";
-          return;
-        }
         try {
-          await loadDashboardInstance(tetrisDemoInstance());
+          if (instanceListMode === "admin") await loadAdminInstance(tetrisDemoInstance(), true);
+          else await loadDashboardInstance(tetrisDemoInstance());
         } catch (err) {
-          setHtml("dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+          setHtml(instanceListMode === "admin" ? "adminStatus" : "dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
         }
       });
     }
@@ -1584,20 +1785,21 @@
         if (!button) return;
         const instance = (state.instances || [])[Number(button.dataset.index)];
         if (!instance) return;
-        if (instanceListMode === "admin") {
-          window.location.href = instance.adminUrl;
-          return;
-        }
         try {
-          await loadDashboardInstance(instance);
+          if (instanceListMode === "admin") await loadAdminInstance(instance, true);
+          else await loadDashboardInstance(instance);
         } catch (err) {
-          setHtml("dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+          setHtml(instanceListMode === "admin" ? "adminStatus" : "dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
         }
       });
     }
   }
 
   async function rotateInstanceKey(keyType) {
+    if (!state.instance) {
+      setHtml("adminStatus", '<p class="error">Load an instance first.</p>');
+      return;
+    }
     const label = keyType === "student" ? "class key" : "teacher key";
     if (!window.confirm("Reset this " + label + "? Old links using that key will stop working.")) return;
     const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/rotate-key"), {
@@ -1628,16 +1830,38 @@
   async function initAdmin() {
     await loadConfig();
     instanceListMode = "admin";
-    await validateAdminInstance();
-    await loadPicture(state.instance.pictureId);
-    setText("pictureTitle", state.picture.title);
-    setText("instanceCode", state.instance.instanceCode);
-    updateAdminLinks();
-    setHtml("adminStatus", '<p class="ok">Admin access loaded for ' + state.instance.teacherName + ".</p>");
-    await refreshAdmin();
-
+    populateAdminCreateForm();
     attachInstanceListHandlers();
-    document.getElementById("refreshRowsButton").addEventListener("click", refreshAdmin);
+    attachAdminCreateHandler();
+    attachTeacherKeyHandlers();
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("instance")) {
+        await validateAdminInstance();
+        showAdminContent();
+        await loadAdminInstance(state.instance, false);
+        if (!isTetrisDemoCode(params.get("instance"))) {
+          loadExistingInstances().catch((err) => {
+            setHtml("adminStatus", '<p class="error">' + err.message + "</p>");
+          });
+        }
+      } else {
+        await loadExistingInstances();
+        showAdminContent();
+        setHtml("adminStatus", '<p class="ok">Admin access loaded. Choose an instance or create a new one.</p>');
+      }
+    } catch (err) {
+      setHtml("adminAuthStatus", '<p class="error">' + err.message + "</p>");
+    }
+
+    document.getElementById("refreshRowsButton").addEventListener("click", async () => {
+      try {
+        if (!state.instance) throw new Error("Load an instance first.");
+        await refreshAdmin();
+      } catch (err) {
+        setHtml("adminStatus", '<p class="error">' + err.message + "</p>");
+      }
+    });
     document.getElementById("rotateStudentKeyButton").addEventListener("click", () => rotateInstanceKey("student"));
     document.getElementById("rotateTeacherKeyButton").addEventListener("click", () => rotateInstanceKey("teacher"));
     document.getElementById("adminReplayButton").addEventListener("click", async () => {
@@ -1654,17 +1878,17 @@
         setHtml("adminStatus", '<p class="error">' + err.message + "</p>");
       }
     });
-    document.getElementById("deleteInstanceButton").addEventListener("click", async () => {
-      if (!window.confirm("Deactivate this instance? Replay data will be preserved, but students will no longer be able to access it.")) return;
-      const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/deactivate"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adminCode: state.instance.adminCode, teacherKey: state.instance.teacherKey || "", adminPassword: isTetrisDemoCode(state.instance.instanceCode) ? "" : adminPassword() })
+    const deleteButton = document.getElementById("deleteInstanceButton");
+    if (deleteButton) {
+      deleteButton.addEventListener("click", async () => {
+        setHtml("adminStatus", '<p class="error">Instances cannot be deactivated or deleted.</p>');
       });
-      const data = await res.json();
-      setHtml("adminStatus", res.ok ? '<p class="ok">Instance deactivated. Replay data was preserved.</p>' : '<p class="error">' + (data.error || "Deactivate failed") + "</p>");
-    });
+    }
     document.getElementById("adminRows").addEventListener("click", async (event) => {
+      if (!state.instance) {
+        setHtml("adminStatus", '<p class="error">Load an instance first.</p>');
+        return;
+      }
       const button = event.target.closest("button");
       if (!button) return;
       const rowEl = button.closest("tr[data-row-id]");
@@ -1682,6 +1906,62 @@
       setHtml("adminStatus", res.ok ? '<p class="ok">Row ' + action + "d.</p>" : '<p class="error">' + (data.error || "Action failed") + "</p>");
       if (res.ok) await refreshAdmin();
     });
+  }
+
+  async function initTeacherDashboard() {
+    await loadConfig();
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("instance");
+    if (code && !isTetrisDemoCode(code)) {
+      try {
+        await ensureTeacherAccess();
+      } catch (err) {
+        setHtml("dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+        return;
+      }
+    }
+    if (code) {
+      document.getElementById("resetInstanceCode").value = code;
+      document.getElementById("resetAdminCode").value = params.get("admin") || (isTetrisDemoCode(code) ? "tetris-demo" : "");
+      document.getElementById("resetTeacherKey").value = params.get("teacherKey") || "";
+    }
+    document.getElementById("resetForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const resetCode = document.getElementById("resetInstanceCode").value;
+      const res = await fetch(serverUrl("/instance/" + encodeURIComponent(resetCode) + "/reset"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adminCode: document.getElementById("resetAdminCode").value,
+          teacherKey: document.getElementById("resetTeacherKey").value,
+          adminPassword: "",
+          teacherAccessKey: isTetrisDemoCode(resetCode) ? "" : teacherAccessKey()
+        })
+      });
+      const data = await res.json();
+      setHtml("resetResult", res.ok ? '<p class="ok">Instance reset.</p>' : '<p class="error">' + (data.error || "Reset failed") + "</p>");
+    });
+    instanceListMode = "dashboard";
+    attachInstanceListHandlers();
+    document.getElementById("adminReplayButton").addEventListener("click", async () => {
+      try {
+        await runAdminAnimation(false);
+      } catch (err) {
+        setHtml("dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+      }
+    });
+    document.getElementById("adminFinishButton").addEventListener("click", async () => {
+      try {
+        await runAdminAnimation(true);
+      } catch (err) {
+        setHtml("dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+      }
+    });
+    if (isTetrisDemoCode(code)) {
+      loadDashboardInstance(tetrisDemoInstance()).catch((err) => {
+        setHtml("dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+      });
+    }
   }
 
   function qrUrl(value) {
@@ -1705,9 +1985,12 @@
       "</div>",
       "</div>"
     ].join(""));
-    document.getElementById("resetInstanceCode").value = data.instanceCode;
-    document.getElementById("resetAdminCode").value = data.adminCode;
-    document.getElementById("resetTeacherKey").value = data.teacherKey || "";
+    const resetInstanceCode = document.getElementById("resetInstanceCode");
+    const resetAdminCode = document.getElementById("resetAdminCode");
+    const resetTeacherKey = document.getElementById("resetTeacherKey");
+    if (resetInstanceCode) resetInstanceCode.value = data.instanceCode;
+    if (resetAdminCode) resetAdminCode.value = data.adminCode;
+    if (resetTeacherKey) resetTeacherKey.value = data.teacherKey || "";
   }
 
   async function initStudent() {
@@ -1770,6 +2053,8 @@
 
   window.PixelPandemonium = {
     initDashboard,
+    initCreateInstance: initDashboard,
+    initTeacherDashboard,
     initAdmin,
     initStudent,
     initReplay,

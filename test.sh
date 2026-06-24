@@ -44,6 +44,7 @@ curl -fsS "$SERVER_URL/health" >/dev/null
 clear_test_auth_failures
 
 test -f index.html
+test -f create-instance.html
 test -f teacher-dashboard.html
 test -f instructions.html
 test -f replay.html
@@ -56,7 +57,8 @@ grep -q "Directions:" index.html
 ! grep -q "about.html" index.html
 grep -q "tileSelectorCanvas" instructions.html
 grep -q "Teacher Dashboard" teacher-dashboard.html
-grep -q "Deactivate Instance" admin.html
+grep -q "Create Instance" create-instance.html
+grep -q "adminCreateForm" admin.html
 grep -q "animationSource" admin.html
 grep -q "animationOrder" admin.html
 grep -q "Existing Instances" admin.html
@@ -71,23 +73,23 @@ grep -q "getTileStatus" assets/js/pixel-pandemonium.js
 grep -q "formatPageRanges" assets/js/pixel-pandemonium.js
 grep -q "fitAspectGridDimensions" assets/js/pixel-pandemonium.js
 grep -q "FFE0B2" assets/js/pixel-pandemonium.js
-grep -q "creationMode" teacher-dashboard.html
+grep -q "creationMode" create-instance.html
 grep -q "analyzeCustomPicture" assets/js/pixel-pandemonium.js
 grep -q "nearestPaletteIndex" assets/js/pixel-pandemonium.js
 grep -q "parseCompositeJs" assets/js/pixel-pandemonium.js
 
 CREATE_RESPONSE="$(curl -fsS -H "Origin: http://localhost:4000" -H "Content-Type: application/json" \
-  -d '{"pictureId":"tetris","teacherName":"Client Test","dateTime":"2026-06-23T13:00:00","expirationHours":1}' \
+  -d '{"pictureId":"tetris","teacherName":"Client Test","dateTime":"2026-06-23T13:00:00","expirationHours":1,"teacherAccessKey":"teacher"}' \
   "$SERVER_URL/instance/create")"
 
 node -e "const d=JSON.parse(process.argv[1]); if(!/instructions\\.html\\?instance=.*&key=/.test(d.studentUrl) || !/replay\\.html\\?instance=.*&key=/.test(d.replayUrl) || !/teacher-dashboard\\.html\\?instance=.*&teacherKey=.*&admin=/.test(d.teacherUrl) || !/admin\\.html\\?instance=.*&teacherKey=.*&admin=/.test(d.adminUrl) || !d.instanceCode || !d.accessKey || !d.teacherKey) process.exit(1)" "$CREATE_RESPONSE"
 
 CUSTOM_RESPONSE="$(curl -fsS -H "Origin: http://localhost:4000" -H "Content-Type: application/json" \
-  -d "{\"title\":\"Client Smoke Custom\",\"adminPassword\":\"$ADMIN_PASSWORD\",\"spec\":{\"palette\":[[255,255,255],[0,0,0]],\"numRows\":1,\"numCols\":1,\"pages\":[{\"col\":\"A\",\"row\":\"1\",\"uncompressed\":[0,1,0,1,0,1,0,1,0,1,0,1,0,1,0]}]}}" \
+  -d "{\"title\":\"Client Smoke Custom\",\"teacherAccessKey\":\"teacher\",\"spec\":{\"palette\":[[255,255,255],[0,0,0]],\"numRows\":1,\"numCols\":1,\"pages\":[{\"col\":\"A\",\"row\":\"1\",\"uncompressed\":[0,1,0,1,0,1,0,1,0,1,0,1,0,1,0]}]}}" \
   "$SERVER_URL/pictures/custom")"
 CUSTOM_ID="$(node -e "const d=JSON.parse(process.argv[1]); if(!d.id || !d.zipUrl) process.exit(1); console.log(d.id)" "$CUSTOM_RESPONSE")"
 CUSTOM_CREATE="$(curl -fsS -H "Origin: http://localhost:4000" -H "Content-Type: application/json" \
-  -d "{\"pictureId\":\"$CUSTOM_ID\",\"teacherName\":\"Client Custom Test\",\"dateTime\":\"2026-06-23T13:00:00\",\"expirationHours\":1}" \
+  -d "{\"pictureId\":\"$CUSTOM_ID\",\"teacherName\":\"Client Custom Test\",\"dateTime\":\"2026-06-23T13:00:00\",\"expirationHours\":1,\"teacherAccessKey\":\"teacher\"}" \
   "$SERVER_URL/instance/create")"
 CUSTOM_CODE="$(node -e "const d=JSON.parse(process.argv[1]); if(!d.instanceCode) process.exit(1); console.log(d.instanceCode)" "$CUSTOM_CREATE")"
 CUSTOM_KEY="$(node -e "const d=JSON.parse(process.argv[1]); if(!d.accessKey) process.exit(1); console.log(d.accessKey)" "$CUSTOM_CREATE")"

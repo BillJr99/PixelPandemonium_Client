@@ -4,7 +4,8 @@ Run these with the server at `http://localhost:8000` and the client at `http://1
 
 ## Teacher Creates A Class Instance
 
-1. Open `teacher-dashboard.html`.
+1. Open `create-instance.html`.
+2. Enter the global teacher key. The local default is `teacher`.
 2. Select `Demo (Tetris)`.
 3. Optionally enter a unique instance name, then enter a teacher name, date/time, and expiration.
 4. Click `Create Instance`.
@@ -28,7 +29,8 @@ Run these with the server at `http://localhost:8000` and the client at `http://1
 
 ## Teacher Creates A Spec-First Custom Instance
 
-1. Open `teacher-dashboard.html?adminPassword=admin`.
+1. Open `create-instance.html`.
+2. Enter the global teacher key. The local default is `teacher`.
 2. Set `Picture Source` to `Upload posterizer specs`.
 3. Enter a custom picture title.
 4. Upload a `Post-It_*_composite.js` file.
@@ -41,7 +43,8 @@ Run these with the server at `http://localhost:8000` and the client at `http://1
 
 ## Teacher Creates An Image-First Custom Instance
 
-1. Open `teacher-dashboard.html?adminPassword=admin`.
+1. Open `create-instance.html`.
+2. Enter the global teacher key. The local default is `teacher`.
 2. Set `Picture Source` to `Upload GIF/image`.
 3. Upload a GIF or other image.
 4. Confirm the dimension menu labels the closest prior dimension with `(closest)`.
@@ -54,7 +57,8 @@ Run these with the server at `http://localhost:8000` and the client at `http://1
 
 ## Incomplete Custom Spec Handling
 
-1. Open `teacher-dashboard.html?adminPassword=admin`.
+1. Open `create-instance.html`.
+2. Enter the global teacher key. The local default is `teacher`.
 2. Set `Picture Source` to `Upload posterizer specs`.
 3. Upload only a ColorMap file.
 4. Click `Analyze Custom Picture`.
