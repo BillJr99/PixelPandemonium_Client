@@ -13,6 +13,7 @@ const PIXEL_DELAY_MS = Number(process.env.DEMO_PIXEL_DELAY_MS || 850);
 const TILE_DELAY_MS = Number(process.env.DEMO_TILE_DELAY_MS || 2000);
 const STUDENT_SWITCH_DELAY_MS = Number(process.env.DEMO_STUDENT_SWITCH_DELAY_MS || 700);
 const ADMIN_ANIMATION_DELAY_MS = Number(process.env.DEMO_ADMIN_ANIMATION_DELAY_MS || 80);
+const ADMIN_PASSWORD = process.env.DEMO_ADMIN_PASSWORD || "admin";
 const FINAL_PAUSE_MS = Number(process.env.DEMO_FINAL_PAUSE_MS || 20000);
 const SLOW_MO_MS = Number(process.env.DEMO_SLOW_MO_MS || 120);
 
@@ -231,7 +232,7 @@ async function fillTile(student, metadata, tile, instance, progress) {
 
 async function showFinalAnimation(admin, instance) {
   console.log("Opening the teacher/admin page and animating the finished image");
-  const url = `${instance.adminUrl}&animationDelayMs=${encodeURIComponent(ADMIN_ANIMATION_DELAY_MS)}`;
+  const url = `${instance.adminUrl}&adminPassword=${encodeURIComponent(ADMIN_PASSWORD)}&animationDelayMs=${encodeURIComponent(ADMIN_ANIMATION_DELAY_MS)}`;
   await admin.page.goto(url);
   await admin.page.locator("#drawCanvas").waitFor({ state: "visible" });
   await admin.page.locator("#adminTileSummary").waitFor({ state: "visible" });

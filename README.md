@@ -164,9 +164,23 @@ npm install
 npm run demo:tetris
 ```
 
+This is the normal visible demo command. It leaves `DEMO_HEADLESS` unset, so it
+opens visible Chromium windows for the teacher/admin view and three students.
 The default pacing is intended for a live demonstration. It usually finishes in
 roughly 5 minutes, depending on machine speed and whether the local servers are
 already running.
+
+Demo mode notes:
+
+- Start from a clean terminal in `PixelPandemonium_client`.
+- Use a projector or screen share that can show the teacher/admin browser window.
+- The script opens three student windows and switches between them as each page
+  is completed.
+- The local default admin password is `admin`; the demo runner supplies it with
+  `DEMO_ADMIN_PASSWORD`, defaulting to `admin`.
+- Leave the terminal visible if you want to show technical progress. It prints
+  each tile as it is assigned and verifies that all 225 Tetris pixels reached the
+  server before the final animation.
 
 Useful timing options:
 
@@ -174,6 +188,7 @@ Useful timing options:
 DEMO_PIXEL_DELAY_MS=850 npm run demo:tetris
 DEMO_ADMIN_ANIMATION_DELAY_MS=80 npm run demo:tetris
 DEMO_FINAL_PAUSE_MS=20000 npm run demo:tetris
+DEMO_ADMIN_PASSWORD=admin npm run demo:tetris
 ```
 
 Useful run-mode options:

@@ -145,6 +145,24 @@
     return digits.length >= 2 && luhnCheckDigit(digits.slice(0, -1)) === digits.slice(-1);
   }
 
+  function adminPassword() {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("adminPassword");
+    if (fromUrl) {
+      window.sessionStorage.setItem("pixelPandemoniumAdminPassword", fromUrl);
+      return fromUrl;
+    }
+    const cached = window.sessionStorage.getItem("pixelPandemoniumAdminPassword");
+    if (cached) return cached;
+    const entered = window.prompt("Enter the Pixel Pandemonium admin password:");
+    if (entered) window.sessionStorage.setItem("pixelPandemoniumAdminPassword", entered);
+    return entered || "";
+  }
+
+  function adminQuery() {
+    return "&adminPassword=" + encodeURIComponent(adminPassword());
+  }
+
   async function validateInstance() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("instance");
@@ -163,7 +181,7 @@
     const admin = params.get("admin");
     if (!code || !admin) showFatal("Missing instance or admin code.");
     if (!clientValidateCheckDigit(code)) showFatal("Invalid instance code. Please double-check the URL.");
-    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(code) + "/admin?admin=" + encodeURIComponent(admin)));
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(code) + "/admin?admin=" + encodeURIComponent(admin) + adminQuery()));
     const data = await res.json();
     if (!res.ok) showFatal(data.error || "This admin URL is not valid.");
     state.instance = {
@@ -748,7 +766,7 @@
       const res = await fetch(serverUrl("/instance/" + encodeURIComponent(code) + "/reset"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adminCode })
+        body: JSON.stringify({ adminCode, adminPassword: adminPassword() })
       });
       const data = await res.json();
       setHtml("resetResult", res.ok ? '<p class="ok">Instance reset.</p>' : '<p class="error">' + (data.error || "Reset failed") + "</p>");
@@ -756,7 +774,7 @@
   }
 
   async function adminFetchRows() {
-    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/admin?admin=" + encodeURIComponent(state.instance.adminCode)));
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/admin?admin=" + encodeURIComponent(state.instance.adminCode) + adminQuery()));
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Admin fetch failed");
     resetFilled();
@@ -851,7 +869,7 @@
       const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/deactivate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adminCode: state.instance.adminCode })
+        body: JSON.stringify({ adminCode: state.instance.adminCode, adminPassword: adminPassword() })
       });
       const data = await res.json();
       setHtml("adminStatus", res.ok ? '<p class="ok">Instance deactivated. Replay data was preserved.</p>' : '<p class="error">' + (data.error || "Deactivate failed") + "</p>");
@@ -863,7 +881,7 @@
       const id = rowEl.dataset.rowId;
       const action = button.dataset.action;
       const endpoint = "/instance/" + encodeURIComponent(state.instance.instanceCode) + "/event/" + encodeURIComponent(id) + "/" + action;
-      const body = { adminCode: state.instance.adminCode };
+      const body = { adminCode: state.instance.adminCode, adminPassword: adminPassword() };
       if (action === "update") body.data = rowEl.querySelector('textarea[data-role="data"]').value;
       const res = await fetch(serverUrl(endpoint), {
         method: "POST",

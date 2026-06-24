@@ -92,7 +92,7 @@ test("dashboard reset clears only the selected instance", async ({ page, request
     data: { data: "0,0,10,10,#000000,0,0" }
   });
 
-  await page.goto(`/teacher-dashboard.html?instance=${encodeURIComponent(first.instanceCode)}&admin=${encodeURIComponent(first.adminCode)}`);
+  await page.goto(`/teacher-dashboard.html?instance=${encodeURIComponent(first.instanceCode)}&admin=${encodeURIComponent(first.adminCode)}&adminPassword=admin`);
   await expect(page.locator("#resetInstanceCode")).toHaveValue(first.instanceCode);
   await expect(page.locator("#resetAdminCode")).toHaveValue(first.adminCode);
   await page.getByRole("button", { name: "Reset Instance" }).click();
@@ -116,7 +116,7 @@ test("admin page edits rows, reports incomplete and mistake pages, animates, and
     data: { data: "0,0,10,10,#000000,0,0" }
   });
 
-  await page.goto(`/admin.html?instance=${encodeURIComponent(instance.instanceCode)}&admin=${encodeURIComponent(instance.adminCode)}`);
+  await page.goto(`/admin.html?instance=${encodeURIComponent(instance.instanceCode)}&admin=${encodeURIComponent(instance.adminCode)}&adminPassword=admin`);
   await expect(page.locator("#adminStatus")).toContainText("Admin access loaded");
   await expect(page.locator("#adminTileSummary")).toContainText("Incomplete pages:");
   await expect(page.locator("#adminTileSummary")).toContainText("A1");
