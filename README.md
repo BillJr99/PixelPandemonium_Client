@@ -28,6 +28,52 @@ If you do not use Bundler:
 gem install jekyll webrick
 ```
 
+## Quick Start: Deployment URLs
+
+The client finds the server through `config.yaml`. Set these values before
+publishing or running a local demo.
+
+### Local Development
+
+Use these defaults when both repos are running on the same machine:
+
+```yaml
+server_url: http://localhost:8000
+realtime_url: http://localhost:8000
+base_url: http://localhost:4000
+```
+
+The server `allowed_origins` should include `http://localhost:4000` and
+`http://127.0.0.1:4000`.
+
+### Cloudflare Worker Server
+
+Use this when the static client is hosted on GitHub Pages and the server is
+deployed to a Cloudflare Worker URL:
+
+```yaml
+server_url: https://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev
+realtime_url: https://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev
+base_url: https://YOUR-GITHUB-USER.github.io/PixelPandemonium_Client
+```
+
+The server deployment must allow the client origin, for example
+`https://YOUR-GITHUB-USER.github.io`, in its `allowed_origins` setting.
+
+### Custom Domains
+
+Use this when either the client, the Worker, or both are behind custom domains:
+
+```yaml
+server_url: https://pixel-pandemonium-api.example.com
+realtime_url: https://pixel-pandemonium-api.example.com
+base_url: https://pixel-pandemonium.example.com
+```
+
+The server `allowed_origins` must include the exact client origin, for example
+`https://pixel-pandemonium.example.com`. Do not include a path in
+`allowed_origins`.
+
 ## Configuration
 
 Edit `config.yaml`.
