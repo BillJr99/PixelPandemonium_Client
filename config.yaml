@@ -1,7 +1,7 @@
 server_url: http://localhost:8000
 realtime_url: http://localhost:8000
 base_url: http://localhost:4000
-default_expiration_hours: 72
+default_expiration_hours: 8760
 subcols: 5
 subrows: 3
 student_canvas_width: 500

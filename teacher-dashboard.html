@@ -22,7 +22,6 @@
   </table>
   <ul class="pp-nav">
     <li><a href="index.html">Pixel Pandemonium</a></li>
-    <li><a href="about.html">About</a></li>
   </ul>
   <div class="page-wrap">
     <h1>Teacher Dashboard</h1>
@@ -63,8 +62,8 @@
           <input id="teacherName" required>
           <label for="dateTime">Date/Time</label>
           <input id="dateTime" type="datetime-local" required>
-          <label for="expirationHours">Expiration Hours</label>
-          <input id="expirationHours" type="number" min="1" step="1" required>
+          <label for="expirationDays">Expiration Days</label>
+          <input id="expirationDays" type="number" min="1" step="1" required>
         </div>
         <p><button type="submit">Create Instance</button></p>
       </form>
@@ -87,6 +86,33 @@
         <p><button type="submit">Reset Instance</button></p>
       </form>
       <div id="resetResult"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Existing Instances</h2>
+      <p>
+        <button type="button" id="loadInstancesButton">Load Instances</button>
+        <button type="button" id="loadTetrisDemoButton">Load Tetris Demo</button>
+      </p>
+      <div id="instancesList"></div>
+      <div id="dashboardAdminStatus"></div>
+      <p>
+        <label for="animationSource">Source</label>
+        <select id="animationSource">
+          <option value="instance">Instance data only</option>
+          <option value="finished">Finished product, filling missing pixels</option>
+        </select>
+        <label for="animationOrder">Order</label>
+        <select id="animationOrder">
+          <option value="chronological">Student completion order</option>
+          <option value="existing-then-sequential">Existing work, then sequential fill</option>
+          <option value="random">Random order</option>
+        </select>
+        <button id="adminReplayButton" type="button">Animate Instance Data</button>
+        <button id="adminFinishButton" type="button">Animate Finished Image</button>
+      </p>
+      <canvas id="drawCanvas" width="720" height="576" style="border:1px solid #000000;"></canvas>
+      <div id="adminTileSummary"></div>
     </div>
   </div>
   <script>PixelPandemonium.initDashboard();</script>

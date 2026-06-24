@@ -35,7 +35,9 @@ Edit `config.yaml`.
 - `server_url`: HTTP API base URL.
 - `realtime_url`: realtime base URL. Usually the same as `server_url`.
 - `base_url`: public client base URL used when generating links.
-- `default_expiration_hours`: default shown on the teacher dashboard.
+- `default_expiration_hours`: server-compatible default used by the teacher
+  dashboard. The UI displays it as days; `8760` appears as `365`, roughly 12
+  months.
 - `subcols` and `subrows`: per-tile pixel grid dimensions.
 - `student_canvas_width` and `student_canvas_height`: student tile canvas size.
 - `replay_cell_size`: rendered full-image pixel size.
@@ -123,7 +125,7 @@ Also confirm these server/client settings:
 1. Open `teacher-dashboard.html`.
 2. Leave `Picture Source` set to `Configured picture`.
 3. Pick a picture, optionally enter a unique instance name, then enter teacher
-   name, date/time, and expiration hours.
+   name, date/time, and expiration days. The default expiration is 12 months.
 4. Click `Create Instance`.
 5. Save or share the generated student URL, replay URL, and admin URL.
 
@@ -154,7 +156,7 @@ deactivated or deleted.
    ColorMap file.
 5. Click `Analyze Custom Picture`.
 6. Confirm the preview and readiness message.
-7. Enter teacher name, date/time, and expiration hours.
+7. Enter teacher name, date/time, and expiration days.
 8. Click `Create Instance`.
 9. Download the generated spec zip if you want to reuse the files later.
 
@@ -170,7 +172,8 @@ list.
 4. Choose an output dimension. The menu is derived from dimensions already used
    by configured pictures and marks the closest match to the uploaded image.
    The selected size is treated as a bounding box: the image is downsampled to
-   fit without changing its aspect ratio, then padded to complete `5x3` pages.
+   fit without changing its aspect ratio and snapped to the nearest `5x3`
+   tile-grid-aligned dimensions that fit inside the box.
 5. Choose `Custom` or edit width/height for a different output size.
 6. Leave the palette blank to auto-extract common colors, or enter one RGB color
    per line.
@@ -178,9 +181,10 @@ list.
 8. Review the preview, then create the instance.
 9. Download the generated posterizer-style zip for later use.
 
-The browser downsamples the image to the selected dimensions, maps pixels to the
-nearest palette color, pads to complete `5x3` pages, and uploads the normalized
-spec to the server.
+The browser downsamples the image to tile-grid-aligned dimensions inside the
+selected box, maps pixels to the nearest palette color, and uploads the
+normalized spec to the server. This avoids artificial white strips on the right
+or bottom edge that would otherwise come from padding odd image dimensions.
 
 ### 5. Student Access
 
@@ -205,6 +209,8 @@ Open the replay URL to see the image rebuild from submitted student data. Use:
 
 - `Replay From Empty` to animate existing submissions in order.
 - `Auto Finish` to fill the final expected image from the picture spec.
+- `Order` to animate sequentially or randomly.
+- `Delay` to speed up or slow down the animation in milliseconds per pixel.
 
 The admin page has additional animation controls:
 
@@ -227,6 +233,7 @@ public Tetris demo.
 
 Admin tools include:
 
+- Active instance listing with links to the student and replay pages.
 - Student and replay links.
 - Teacher dashboard link.
 - Incomplete page and mistake summaries.
@@ -288,10 +295,13 @@ For GitHub Pages, the server must be deployed separately. The static client cann
 - Wrong-color tiles are amber; wrong sub-pixels get red outlines.
 - Students correct mistakes by clicking the correct color and overwriting the sub-pixel.
 - Teacher opens the replay URL and sees the image rebuild from replay data.
+- Teacher can control replay animation speed and sequential/random order.
 - Teacher can auto-finish the replay from the expected image data.
 - Teacher can reset an instance with the admin URL/code.
 - Teacher/admin can rotate the class key or teacher key from the admin page.
 - Admin page shows incomplete pages and pages with mistakes.
+- Teacher dashboard and admin page can list existing instances and open the
+  public Tetris demo animation.
 - Admin page can edit or delete individual replay rows.
 - Admin page can deactivate an instance. Deactivation preserves replay rows but makes the instance unavailable to students and normal replay/status pages.
 - Admin page can generate a time-lapse from instance data in student completion order or random order.
@@ -310,9 +320,9 @@ The dashboard supports two custom creation paths:
   what is missing and blocks instance creation.
 - Image-first: upload a GIF, PNG, JPEG, or WebP image. The browser downsamples
   the image within the selected output dimensions without changing aspect ratio,
-  maps every pixel to the nearest palette color, pads the result to complete
-  `5x3` pages, and builds the same runtime spec used by the original composite
-  JS files.
+  snaps the fitted size to `5x3` tile-grid multiples, maps every pixel to the
+  nearest palette color, and builds the same runtime spec used by the original
+  composite JS files.
 
 Dimension controls:
 
@@ -322,6 +332,9 @@ Dimension controls:
 - After an image is selected, the closest prior dimension is labeled
   `(closest)`.
 - Choose `Custom` or edit width/height to specify a different output size.
+- Custom dimensions are also treated as a bounding box. The generator makes the
+  smallest practical revision to the fitted width or height so the output aligns
+  with the student tile grid and does not need visible padding.
 
 Palette controls:
 

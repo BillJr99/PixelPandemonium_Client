@@ -123,7 +123,7 @@ async function createTetrisInstance(page) {
   await page.locator("#pictureId").selectOption("tetris");
   await page.locator("#teacherName").fill("Demo Teacher");
   await page.locator("#dateTime").fill("2026-06-24T10:00");
-  await page.locator("#expirationHours").fill("2");
+  await page.locator("#expirationDays").fill("2");
   await page.getByRole("button", { name: "Create Instance" }).click();
   await page.locator("#createResult").waitFor({ state: "visible" });
 

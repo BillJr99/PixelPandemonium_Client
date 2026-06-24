@@ -21,6 +21,7 @@
   let priorDimensions = [];
   let customDraft = null;
   let currentImageDimensions = null;
+  let instanceListMode = "dashboard";
 
   function parseScalar(value) {
     const trimmed = value.trim();
@@ -180,28 +181,35 @@
     return String(code || "").toLowerCase() === "tetris";
   }
 
-  function promptForUrlKey(paramName, promptText) {
+  function promptForUrlValue(paramName, promptText, missingMessage) {
     const params = new URLSearchParams(window.location.search);
     const existing = params.get(paramName);
     if (existing) return existing;
     const entered = window.prompt(promptText);
-    if (!entered) showFatal("Missing required access key.");
+    if (!entered) showFatal(missingMessage || "Missing required URL value.");
     params.set(paramName, entered.trim());
     window.history.replaceState(null, "", window.location.pathname + "?" + params.toString() + window.location.hash);
     return entered.trim();
   }
 
-  function repromptUrlKey(paramName, promptText) {
+  function promptForUrlKey(paramName, promptText) {
+    return promptForUrlValue(paramName, promptText, "Missing required access key.");
+  }
+
+  function repromptUrlValue(paramName, promptText, missingMessage) {
     const params = new URLSearchParams(window.location.search);
     params.delete(paramName);
     window.history.replaceState(null, "", window.location.pathname + "?" + params.toString() + window.location.hash);
-    return promptForUrlKey(paramName, promptText);
+    return promptForUrlValue(paramName, promptText, missingMessage);
+  }
+
+  function repromptUrlKey(paramName, promptText) {
+    return repromptUrlValue(paramName, promptText, "Missing required access key.");
   }
 
   async function validateInstance(retried) {
     const params = new URLSearchParams(window.location.search);
-    const code = params.get("instance");
-    if (!code) showFatal("No instance code in URL. Please use the URL your teacher gave you.");
+    const code = params.get("instance") || promptForUrlValue("instance", "Enter the class instance code:", "Missing class instance code.");
     const key = params.get("key") || "";
     if (!clientValidateCheckDigit(code)) showFatal("Invalid instance code. Please double-check the URL.");
     const keyQuery = key ? "?key=" + encodeURIComponent(key) : "";
@@ -218,9 +226,8 @@
 
   async function validateAdminInstance(retried) {
     const params = new URLSearchParams(window.location.search);
-    const code = params.get("instance");
-    const admin = params.get("admin") || (isTetrisDemoCode(code) ? "tetris-demo" : "");
-    if (!code || !admin) showFatal("Missing instance or admin code.");
+    const code = params.get("instance") || promptForUrlValue("instance", "Enter the instance code:", "Missing instance code.");
+    const admin = params.get("admin") || (isTetrisDemoCode(code) ? "tetris-demo" : promptForUrlValue("admin", "Enter the admin code:", "Missing admin code."));
     const teacherKey = params.get("teacherKey") || "";
     if (!clientValidateCheckDigit(code)) showFatal("Invalid instance code. Please double-check the URL.");
     const teacherKeyQuery = teacherKey ? "&teacherKey=" + encodeURIComponent(teacherKey) : "";
@@ -229,6 +236,10 @@
     const data = await res.json();
     if (res.status === 403 && /teacher key/i.test(data.error || "") && !retried) {
       repromptUrlKey("teacherKey", "That teacher access key was not accepted. Enter the teacher access key:");
+      return validateAdminInstance(true);
+    }
+    if (res.status === 403 && /admin code/i.test(data.error || "") && !retried) {
+      repromptUrlValue("admin", "That admin code was not accepted. Enter the admin code:", "Missing admin code.");
       return validateAdminInstance(true);
     }
     if (!res.ok) showFatal(data.error || "This admin URL is not valid.");
@@ -365,15 +376,43 @@
     const labels = [];
     for (let col = 0; col < state.numCols; col++) {
       for (let row = 0; row < state.numRows; row++) {
-        if (getTileStatus(row, col) !== "complete") labels.push(pageLabel(row, col));
+        if (getTileStatus(row, col) !== "complete") labels.push({ col, row, label: pageLabel(row, col) });
       }
     }
     return labels;
   }
 
+  function pageRangeLabel(start, end) {
+    const colLetter = String.fromCharCode("A".charCodeAt(0) + start.col);
+    if (start.row === end.row) return colLetter + String(start.row + 1);
+    return colLetter + String(start.row + 1) + "-" + colLetter + String(end.row + 1);
+  }
+
+  function formatPageRanges(pages) {
+    const ranges = [];
+    let start = null;
+    let previous = null;
+    pages.forEach((page) => {
+      if (!start) {
+        start = page;
+        previous = page;
+        return;
+      }
+      if (page.col === previous.col && page.row === previous.row + 1) {
+        previous = page;
+        return;
+      }
+      ranges.push(pageRangeLabel(start, previous));
+      start = page;
+      previous = page;
+    });
+    if (start) ranges.push(pageRangeLabel(start, previous));
+    return ranges.join(", ");
+  }
+
   function setPagesThatRemain() {
-    const labels = incompleteLabels();
-    setText("remainingPages", labels.length ? "Here are some pages that remain to be filled in: " + labels.join(", ") : "");
+    const pages = incompleteLabels();
+    setText("remainingPages", pages.length ? "Here are some pages that remain to be filled in: " + formatPageRanges(pages) : "");
   }
 
   async function retrieveReplay() {
@@ -540,7 +579,11 @@
     const ctx = canvas.getContext("2d");
     const tileW = canvas.width / state.numCols;
     const tileH = canvas.height / state.numRows;
+    const fontSize = Math.max(12, Math.min(18, Math.floor(Math.min(tileW, tileH) * 0.38)));
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = fontSize + "px Arial";
     for (let col = 0; col < state.numCols; col++) {
       for (let row = 0; row < state.numRows; row++) {
         const status = getTileStatus(row, col);
@@ -550,8 +593,7 @@
         ctx.lineWidth = state.selectedTile && state.selectedTile.row === row && state.selectedTile.col === col ? 3 : 1;
         ctx.strokeRect(col * tileW, row * tileH, tileW, tileH);
         ctx.fillStyle = status === "complete" ? "#777" : "#333";
-        ctx.font = "14px Arial";
-        ctx.fillText(pageLabel(row, col), col * tileW + tileW / 2 - 12, row * tileH + tileH / 2 + 5);
+        ctx.fillText(pageLabel(row, col), col * tileW + tileW / 2, row * tileH + tileH / 2);
       }
     }
   }
@@ -701,10 +743,21 @@
     return Number.isFinite(delay) && delay >= 0 ? delay : defaultDelay;
   }
 
+  function replayDelay(defaultDelay) {
+    const input = document.getElementById("replayDelayMs");
+    const delay = input ? Number(input.value) : NaN;
+    return Number.isFinite(delay) && delay >= 0 ? delay : defaultDelay;
+  }
+
+  function replayOrder() {
+    const order = document.getElementById("replayOrder");
+    return order ? order.value : "chronological";
+  }
+
   function orderedRows(rows) {
     const copy = rows.slice();
     const order = document.getElementById("animationOrder");
-    if (order && order.value === "random") {
+    if ((order && order.value === "random") || (!order && replayOrder() === "random")) {
       for (let i = copy.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         const tmp = copy[i];
@@ -805,6 +858,9 @@
   function populateDimensionPresets(imageWidth, imageHeight) {
     const select = document.getElementById("dimensionPreset");
     if (!select) return;
+    const previousValue = select.value;
+    const previousWidth = Number(document.getElementById("customWidth").value);
+    const previousHeight = Number(document.getElementById("customHeight").value);
     if (!priorDimensions.length) priorDimensions = [[state.subcols, state.subrows]];
     select.innerHTML = "";
     let bestIndex = 0;
@@ -821,9 +877,21 @@
     custom.value = "custom";
     custom.textContent = "Custom";
     select.appendChild(custom);
-    select.selectedIndex = bestIndex;
-    document.getElementById("customWidth").value = priorDimensions[bestIndex][0];
-    document.getElementById("customHeight").value = priorDimensions[bestIndex][1];
+    const optionValues = Array.from(select.options).map((option) => option.value);
+    if (previousValue === "custom" && previousWidth > 0 && previousHeight > 0) {
+      select.value = "custom";
+      document.getElementById("customWidth").value = previousWidth;
+      document.getElementById("customHeight").value = previousHeight;
+    } else if (previousValue && optionValues.includes(previousValue)) {
+      select.value = previousValue;
+      const parts = previousValue.split("x").map(Number);
+      document.getElementById("customWidth").value = parts[0];
+      document.getElementById("customHeight").value = parts[1];
+    } else {
+      select.selectedIndex = bestIndex;
+      document.getElementById("customWidth").value = priorDimensions[bestIndex][0];
+      document.getElementById("customHeight").value = priorDimensions[bestIndex][1];
+    }
   }
 
   function selectedDimensions() {
@@ -846,6 +914,24 @@
     if (boxAspect > sourceAspect) width = Math.max(1, Math.round(maxHeight * sourceAspect));
     else height = Math.max(1, Math.round(maxWidth / sourceAspect));
     return { width, height };
+  }
+
+  function fitAspectGridDimensions(sourceWidth, sourceHeight, maxWidth, maxHeight) {
+    const sourceAspect = sourceWidth / sourceHeight;
+    const maxCols = Math.max(1, Math.floor(maxWidth / state.subcols));
+    const maxRows = Math.max(1, Math.floor(maxHeight / state.subrows));
+    let best = null;
+    for (let cols = 1; cols <= maxCols; cols++) {
+      for (let rows = 1; rows <= maxRows; rows++) {
+        const width = cols * state.subcols;
+        const height = rows * state.subrows;
+        const aspectError = Math.abs(Math.log((width / height) / sourceAspect));
+        const areaError = Math.abs(Math.log((width * height) / (maxWidth * maxHeight)));
+        const score = aspectError * 10 + areaError;
+        if (!best || score < best.score) best = { width, height, score };
+      }
+    }
+    return { width: best.width, height: best.height };
   }
 
   function parsePaletteText(text) {
@@ -1083,10 +1169,11 @@
     const file = document.getElementById("imageFile").files[0];
     if (!file) throw new Error("Choose a GIF or image");
     const img = await readImage(file);
+    currentImageDimensions = { width: img.naturalWidth, height: img.naturalHeight };
     populateDimensionPresets(img.naturalWidth, img.naturalHeight);
     const dims = selectedDimensions();
     if (!dims.width || !dims.height) throw new Error("Choose output dimensions");
-    const fitted = fitAspectDimensions(img.naturalWidth, img.naturalHeight, dims.width, dims.height);
+    const fitted = fitAspectGridDimensions(img.naturalWidth, img.naturalHeight, dims.width, dims.height);
     const canvas = document.createElement("canvas");
     canvas.width = fitted.width;
     canvas.height = fitted.height;
@@ -1103,7 +1190,14 @@
     for (let i = 0; i < imageData.data.length; i += 4) {
       indexes.push(nearestPaletteIndex([imageData.data[i], imageData.data[i + 1], imageData.data[i + 2]], palette));
     }
-    return validateClientSpec(specFromIndexedPixels(indexes, fitted.width, fitted.height, palette));
+    const spec = validateClientSpec(specFromIndexedPixels(indexes, fitted.width, fitted.height, palette));
+    spec.sourceWidth = img.naturalWidth;
+    spec.sourceHeight = img.naturalHeight;
+    spec.requestedWidth = dims.width;
+    spec.requestedHeight = dims.height;
+    spec.fittedWidth = fitted.width;
+    spec.fittedHeight = fitted.height;
+    return spec;
   }
 
   async function analyzeCustomPicture() {
@@ -1114,7 +1208,10 @@
     const artifacts = generateClientArtifacts(title, spec);
     customDraft = { title, spec, artifacts };
     drawSpecPreview(spec);
-    setHtml("customPictureStatus", '<p class="ok">Custom picture ready: ' + spec.numCols + " columns by " + spec.numRows + " rows.</p>");
+    const fitted = spec.fittedWidth && spec.fittedHeight
+      ? " Source image " + spec.sourceWidth + "x" + spec.sourceHeight + " fitted into " + spec.requestedWidth + "x" + spec.requestedHeight + " as " + spec.fittedWidth + "x" + spec.fittedHeight + " to preserve aspect ratio."
+      : "";
+    setHtml("customPictureStatus", '<p class="ok">Custom picture ready: ' + spec.numCols + " columns by " + spec.numRows + " rows." + fitted + "</p>");
     return customDraft;
   }
 
@@ -1152,7 +1249,7 @@
       option.textContent = pic.title;
       pictureSelect.appendChild(option);
     });
-    document.getElementById("expirationHours").value = state.config.default_expiration_hours || 72;
+    document.getElementById("expirationDays").value = Math.max(1, Math.round(Number(state.config.default_expiration_hours || 8760) / 24));
     document.getElementById("dateTime").value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
     const params = new URLSearchParams(window.location.search);
@@ -1244,7 +1341,7 @@
           instanceName: document.getElementById("instanceName").value,
           teacherName: document.getElementById("teacherName").value,
           dateTime: document.getElementById("dateTime").value,
-          expirationHours: Number(document.getElementById("expirationHours").value)
+          expirationHours: Number(document.getElementById("expirationDays").value) * 24
         };
         const res = await fetch(serverUrl("/instance/create"), {
           method: "POST",
@@ -1279,6 +1376,28 @@
       const data = await res.json();
       setHtml("resetResult", res.ok ? '<p class="ok">Instance reset.</p>' : '<p class="error">' + (data.error || "Reset failed") + "</p>");
     });
+
+    instanceListMode = "dashboard";
+    attachInstanceListHandlers();
+    document.getElementById("adminReplayButton").addEventListener("click", async () => {
+      try {
+        await runAdminAnimation(false);
+      } catch (err) {
+        setHtml("dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+      }
+    });
+    document.getElementById("adminFinishButton").addEventListener("click", async () => {
+      try {
+        await runAdminAnimation(true);
+      } catch (err) {
+        setHtml("dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+      }
+    });
+    if (isTetrisDemoCode(params.get("instance"))) {
+      loadDashboardInstance(tetrisDemoInstance()).catch((err) => {
+        setHtml("dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+      });
+    }
   }
 
   async function adminFetchRows() {
@@ -1321,12 +1440,12 @@
     for (let col = 0; col < state.numCols; col++) {
       for (let row = 0; row < state.numRows; row++) {
         const status = getTileStatus(row, col);
-        if (status !== "complete") incomplete.push(pageLabel(row, col));
+        if (status !== "complete") incomplete.push({ col, row, label: pageLabel(row, col) });
         if (status === "error") mistakes.push(pageLabel(row, col));
       }
     }
     setHtml("adminTileSummary", [
-      "<p><strong>Incomplete pages:</strong> " + (incomplete.length ? incomplete.join(", ") : "None") + "</p>",
+      "<p><strong>Incomplete pages:</strong> " + (incomplete.length ? formatPageRanges(incomplete) : "None") + "</p>",
       "<p><strong>Pages with mistakes:</strong> " + (mistakes.length ? mistakes.join(", ") : "None") + "</p>"
     ].join(""));
   }
@@ -1351,6 +1470,133 @@
     }
   }
 
+  function tetrisDemoInstance() {
+    return {
+      instanceCode: "tetris",
+      instanceName: "tetris",
+      pictureId: "tetris",
+      pictureTitle: "Demo (Tetris)",
+      teacherName: "Public Demo",
+      adminCode: "tetris-demo",
+      accessKey: "",
+      teacherKey: "",
+      studentUrl: absoluteUrl("instructions.html?instance=tetris"),
+      replayUrl: absoluteUrl("replay.html?instance=tetris"),
+      teacherUrl: absoluteUrl("teacher-dashboard.html?instance=tetris"),
+      adminUrl: absoluteUrl("admin.html?instance=tetris")
+    };
+  }
+
+  function htmlEscape(value) {
+    return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function renderInstancesList(instances) {
+    if (!instances.length) {
+      setHtml("instancesList", "<p>No active instances found.</p>");
+      return;
+    }
+    const rows = [
+      '<table class="admin-table">',
+      "<thead><tr><th>Instance</th><th>Picture</th><th>Teacher</th><th>Expires</th><th>Actions</th></tr></thead><tbody>"
+    ];
+    instances.forEach((instance, index) => {
+      rows.push(
+        "<tr>",
+        "<td><span class=\"mono\">" + htmlEscape(instance.instanceName || instance.instanceCode) + "</span><br><small>" + htmlEscape(instance.instanceCode) + "</small></td>",
+        "<td>" + htmlEscape(instance.pictureTitle || instance.pictureId) + "</td>",
+        "<td>" + htmlEscape(instance.teacherName || "") + "</td>",
+        "<td>" + htmlEscape(instance.expiresAt || "") + "</td>",
+        '<td><button type="button" data-action="load-instance" data-index="' + index + '">' + (instanceListMode === "admin" ? "Open Admin" : "Load") + "</button> " +
+          '<a href="' + htmlEscape(instance.studentUrl || "") + '" target="_blank">Student</a> ' +
+          '<a href="' + htmlEscape(instance.replayUrl || "") + '" target="_blank">Replay</a></td>',
+        "</tr>"
+      );
+    });
+    rows.push("</tbody></table>");
+    setHtml("instancesList", rows.join(""));
+  }
+
+  async function loadExistingInstances() {
+    const res = await fetch(serverUrl("/instances?adminPassword=" + encodeURIComponent(adminPassword())));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Could not load instances");
+    state.instances = data.instances || [];
+    renderInstancesList(state.instances);
+    return state.instances;
+  }
+
+  async function loadDashboardInstance(instance) {
+    state.instance = { ...instance };
+    await loadPicture(state.instance.pictureId);
+    makeReplayGrid();
+    const rows = await adminFetchRows();
+    renderAdminTileSummary();
+    rowsFromFilled().forEach((row) => drawReplayMessage(row.DATA));
+    document.getElementById("resetInstanceCode").value = state.instance.instanceCode;
+    document.getElementById("resetAdminCode").value = state.instance.adminCode || "";
+    document.getElementById("resetTeacherKey").value = state.instance.teacherKey || "";
+    setHtml("dashboardAdminStatus", '<p class="ok">Loaded ' + htmlEscape(state.instance.instanceName || state.instance.instanceCode) + ".</p>");
+  }
+
+  async function runAdminAnimation(finishOnly) {
+    if (!state.instance) throw new Error("Load an instance first.");
+    const rows = finishOnly ? (state.instance.rows || []) : await adminFetchRows();
+    const source = document.getElementById("animationSource").value;
+    const order = document.getElementById("animationOrder").value;
+    if (finishOnly || source === "finished") {
+      const baseRows = order === "random" ? orderedRows(rows) : rows;
+      replayRows(completedImageRows(baseRows, order === "random" ? "random" : "existing-then-sequential"), adminAnimationDelay(finishOnly ? 1 : 5));
+    } else {
+      replayRows(orderedRows(rows), adminAnimationDelay(5));
+    }
+  }
+
+  function attachInstanceListHandlers() {
+    const loadButton = document.getElementById("loadInstancesButton");
+    if (loadButton) {
+      loadButton.addEventListener("click", async () => {
+        try {
+          await loadExistingInstances();
+        } catch (err) {
+          setHtml(instanceListMode === "admin" ? "adminStatus" : "dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+        }
+      });
+    }
+    const tetrisButton = document.getElementById("loadTetrisDemoButton");
+    if (tetrisButton) {
+      tetrisButton.addEventListener("click", async () => {
+        if (instanceListMode === "admin") {
+          window.location.href = "admin.html?instance=tetris";
+          return;
+        }
+        try {
+          await loadDashboardInstance(tetrisDemoInstance());
+        } catch (err) {
+          setHtml("dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+        }
+      });
+    }
+    const list = document.getElementById("instancesList");
+    if (list) {
+      list.addEventListener("click", async (event) => {
+        const button = event.target.closest('button[data-action="load-instance"]');
+        if (!button) return;
+        const instance = (state.instances || [])[Number(button.dataset.index)];
+        if (!instance) return;
+        if (instanceListMode === "admin") {
+          window.location.href = instance.adminUrl;
+          return;
+        }
+        try {
+          await loadDashboardInstance(instance);
+        } catch (err) {
+          setHtml("dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
+        }
+      });
+    }
+  }
+
   async function rotateInstanceKey(keyType) {
     const label = keyType === "student" ? "class key" : "teacher key";
     if (!window.confirm("Reset this " + label + "? Old links using that key will stop working.")) return;
@@ -1361,7 +1607,7 @@
         keyType,
         adminCode: state.instance.adminCode,
         teacherKey: state.instance.teacherKey || "",
-        adminPassword: adminPassword()
+        adminPassword: isTetrisDemoCode(state.instance.instanceCode) ? "" : adminPassword()
       })
     });
     const data = await res.json();
@@ -1381,6 +1627,7 @@
 
   async function initAdmin() {
     await loadConfig();
+    instanceListMode = "admin";
     await validateAdminInstance();
     await loadPicture(state.instance.pictureId);
     setText("pictureTitle", state.picture.title);
@@ -1389,35 +1636,30 @@
     setHtml("adminStatus", '<p class="ok">Admin access loaded for ' + state.instance.teacherName + ".</p>");
     await refreshAdmin();
 
+    attachInstanceListHandlers();
     document.getElementById("refreshRowsButton").addEventListener("click", refreshAdmin);
     document.getElementById("rotateStudentKeyButton").addEventListener("click", () => rotateInstanceKey("student"));
     document.getElementById("rotateTeacherKeyButton").addEventListener("click", () => rotateInstanceKey("teacher"));
     document.getElementById("adminReplayButton").addEventListener("click", async () => {
-      const rows = await adminFetchRows();
-      const source = document.getElementById("animationSource").value;
-      const order = document.getElementById("animationOrder").value;
-      if (source === "finished") {
-        replayRows(completedImageRows(order === "random" ? orderedRows(rows) : rows, order), adminAnimationDelay(5));
-      } else {
-        replayRows(orderedRows(rows), adminAnimationDelay(5));
+      try {
+        await runAdminAnimation(false);
+      } catch (err) {
+        setHtml("adminStatus", '<p class="error">' + err.message + "</p>");
       }
     });
-    document.getElementById("adminFinishButton").addEventListener("click", () => {
-      makeReplayGrid();
-      const order = document.getElementById("animationOrder").value;
-      const rows = order === "existing-then-sequential"
-        ? completedImageRows(state.instance.rows || [], order)
-        : order === "random"
-          ? completedImageRows(orderedRows(state.instance.rows || []), order)
-          : completedImageRows(state.instance.rows || [], "existing-then-sequential");
-      replayRows(rows, adminAnimationDelay(1));
+    document.getElementById("adminFinishButton").addEventListener("click", async () => {
+      try {
+        await runAdminAnimation(true);
+      } catch (err) {
+        setHtml("adminStatus", '<p class="error">' + err.message + "</p>");
+      }
     });
     document.getElementById("deleteInstanceButton").addEventListener("click", async () => {
       if (!window.confirm("Deactivate this instance? Replay data will be preserved, but students will no longer be able to access it.")) return;
       const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/deactivate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adminCode: state.instance.adminCode, teacherKey: state.instance.teacherKey || "", adminPassword: adminPassword() })
+        body: JSON.stringify({ adminCode: state.instance.adminCode, teacherKey: state.instance.teacherKey || "", adminPassword: isTetrisDemoCode(state.instance.instanceCode) ? "" : adminPassword() })
       });
       const data = await res.json();
       setHtml("adminStatus", res.ok ? '<p class="ok">Instance deactivated. Replay data was preserved.</p>' : '<p class="error">' + (data.error || "Deactivate failed") + "</p>");
@@ -1429,7 +1671,7 @@
       const id = rowEl.dataset.rowId;
       const action = button.dataset.action;
       const endpoint = "/instance/" + encodeURIComponent(state.instance.instanceCode) + "/event/" + encodeURIComponent(id) + "/" + action;
-      const body = { adminCode: state.instance.adminCode, teacherKey: state.instance.teacherKey || "", adminPassword: adminPassword() };
+      const body = { adminCode: state.instance.adminCode, teacherKey: state.instance.teacherKey || "", adminPassword: isTetrisDemoCode(state.instance.instanceCode) ? "" : adminPassword() };
       if (action === "update") body.data = rowEl.querySelector('textarea[data-role="data"]').value;
       const res = await fetch(serverUrl(endpoint), {
         method: "POST",
@@ -1497,9 +1739,17 @@
     setText("instanceCode", state.instance.instanceCode);
     makeReplayGrid();
     const rows = await retrieveReplay();
-    replayRows(rows, 5);
-    document.getElementById("replayButton").addEventListener("click", () => replayRows(rows, 5));
-    document.getElementById("finishButton").addEventListener("click", () => replayRows(expectedCompletionRows(), 1));
+    replayRows(orderedRows(rows), replayDelay(5));
+    document.getElementById("replayButton").addEventListener("click", async () => {
+      const latestRows = await retrieveReplay();
+      replayRows(orderedRows(latestRows), replayDelay(5));
+    });
+    document.getElementById("finishButton").addEventListener("click", async () => {
+      const latestRows = await retrieveReplay();
+      const order = replayOrder();
+      const baseRows = order === "random" ? orderedRows(latestRows) : latestRows;
+      replayRows(completedImageRows(baseRows, order), replayDelay(1));
+    });
     await loadFayeScript();
     await setupRealtime((message) => {
       applyMessage(message);
@@ -1532,6 +1782,8 @@
       rgbToHex,
       getTileStatus: function (row, col) { return getTileStatus(row, col); },
       fitAspectDimensions,
+      fitAspectGridDimensions,
+      formatPageRanges,
       state
     }
   };

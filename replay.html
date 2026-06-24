@@ -21,6 +21,17 @@
     </tr>
   </table>
   <ul class="pp-nav">
+    <li>
+      <label for="replayOrder">Order</label>
+      <select id="replayOrder">
+        <option value="chronological">Sequential</option>
+        <option value="random">Random</option>
+      </select>
+    </li>
+    <li>
+      <label for="replayDelayMs">Delay</label>
+      <input id="replayDelayMs" type="number" min="0" step="1" value="5" style="width:5em"> ms
+    </li>
     <li><button id="replayButton" type="button">Replay From Empty</button></li>
     <li><button id="finishButton" type="button">Auto Finish</button></li>
   </ul>

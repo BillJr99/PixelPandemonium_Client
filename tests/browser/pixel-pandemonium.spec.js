@@ -26,7 +26,7 @@ test("teacher dashboard creates an instance and renders URLs plus QR codes", asy
   await page.locator("#instanceName").fill("browser-" + Math.random().toString(36).slice(2, 8));
   await page.locator("#teacherName").fill("Browser Teacher");
   await page.locator("#dateTime").fill("2026-06-23T14:00");
-  await page.locator("#expirationHours").fill("1");
+  await page.locator("#expirationDays").fill("1");
   await page.getByRole("button", { name: "Create Instance" }).click();
 
   await expect(page.locator("#createResult")).toContainText("Instance created");
@@ -46,7 +46,7 @@ test("teacher dashboard rejects duplicate instance names", async ({ page }) => {
   await page.locator("#instanceName").fill(instanceName);
   await page.locator("#teacherName").fill("Duplicate First");
   await page.locator("#dateTime").fill("2026-06-23T14:00");
-  await page.locator("#expirationHours").fill("1");
+  await page.locator("#expirationDays").fill("1");
   await page.getByRole("button", { name: "Create Instance" }).click();
   await expect(page.locator("#createResult")).toContainText("Instance created");
 
@@ -55,7 +55,7 @@ test("teacher dashboard rejects duplicate instance names", async ({ page }) => {
   await page.locator("#instanceName").fill(instanceName);
   await page.locator("#teacherName").fill("Duplicate Second");
   await page.locator("#dateTime").fill("2026-06-23T15:00");
-  await page.locator("#expirationHours").fill("1");
+  await page.locator("#expirationDays").fill("1");
   await page.getByRole("button", { name: "Create Instance" }).click();
   await expect(page.locator("#createResult")).toContainText("Instance name already exists");
 });
@@ -66,7 +66,7 @@ test("teacher dashboard rejects the reserved tetris instance name", async ({ pag
   await page.locator("#instanceName").fill("tetris");
   await page.locator("#teacherName").fill("Reserved Name");
   await page.locator("#dateTime").fill("2026-06-23T16:00");
-  await page.locator("#expirationHours").fill("1");
+  await page.locator("#expirationDays").fill("1");
   await page.getByRole("button", { name: "Create Instance" }).click();
   await expect(page.locator("#createResult")).toContainText("Instance name is reserved");
 });
@@ -81,7 +81,7 @@ test("teacher dashboard creates an instance from uploaded posterizer spec files"
 
   await page.locator("#teacherName").fill("Spec Teacher");
   await page.locator("#dateTime").fill("2026-06-23T14:00");
-  await page.locator("#expirationHours").fill("1");
+  await page.locator("#expirationDays").fill("1");
   await page.getByRole("button", { name: "Create Instance" }).click();
   await expect(page.locator("#customPictureStatus")).toContainText("Download spec files zip");
   await expect(page.locator("#createResult")).toContainText("Instance created");
@@ -95,18 +95,24 @@ test("teacher dashboard creates an instance from uploaded posterizer spec files"
 test("teacher dashboard creates an image-first instance with dimension and palette remapping", async ({ page }) => {
   await page.goto("/teacher-dashboard.html?adminPassword=admin");
   await expect(await page.evaluate(() => window.PixelPandemonium.__test.fitAspectDimensions(576, 216, 100, 36))).toEqual({ width: 96, height: 36 });
+  await expect(await page.evaluate(() => window.PixelPandemonium.__test.fitAspectGridDimensions(576, 216, 100, 36))).toEqual({ width: 95, height: 36 });
   await page.locator("#creationMode").selectOption("image");
   await page.locator("#customTitle").fill("Browser Image Custom");
   await page.locator("#imageFile").setInputFiles(path.join(process.cwd(), "files/drawingcanvas-tetris/tetris.gif"));
+  await expect(page.locator("#customPictureStatus")).toContainText("Image loaded");
   await expect(page.locator("#dimensionPreset")).toContainText("15x15 (closest)");
+  await page.locator("#dimensionPreset").selectOption("custom");
+  await page.locator("#customWidth").fill("100");
+  await page.locator("#customHeight").fill("36");
   await page.locator("#paletteEditor").fill("255,255,255\n0,0,0\n0,255,0\n255,0,0");
   await page.getByRole("button", { name: "Remap Palette" }).click();
   await expect(page.locator("#customPictureStatus")).toContainText("Custom picture ready");
+  await expect(page.locator("#customPictureStatus")).toContainText("as 35x36");
   await expect(page.locator("#customPreviewCanvas")).toBeVisible();
 
   await page.locator("#teacherName").fill("Image Teacher");
   await page.locator("#dateTime").fill("2026-06-23T14:00");
-  await page.locator("#expirationHours").fill("1");
+  await page.locator("#expirationDays").fill("1");
   await page.getByRole("button", { name: "Create Instance" }).click();
   await expect(page.locator("#createResult")).toContainText("Instance created");
 
@@ -126,7 +132,7 @@ test("teacher dashboard blocks incomplete spec uploads with missing-data guidanc
 
   await page.locator("#teacherName").fill("Incomplete Teacher");
   await page.locator("#dateTime").fill("2026-06-23T14:00");
-  await page.locator("#expirationHours").fill("1");
+  await page.locator("#expirationDays").fill("1");
   await page.getByRole("button", { name: "Create Instance" }).click();
   await expect(page.locator("#createResult")).toContainText("Missing complete spec data");
 });
@@ -137,8 +143,12 @@ test("student page validates an instance, auto-selects a tile, submits a wrong p
 
   await expect(page.locator("#pictureTitle")).toContainText("Tetris");
   await expect(page.locator("#tileSelectorCanvas")).toBeVisible();
+  await expect(page.locator("#tileSelectorCanvas")).toHaveAttribute("width", "720");
+  await expect(page.locator("#tileSelectorCanvas")).toHaveAttribute("height", "480");
   await expect(page.locator("#drawCanvas")).toBeVisible();
   await expect(page.locator("#tileStatusText")).toContainText("Selected:");
+  await expect(page.locator("#remainingPages")).toContainText("A1-A5");
+  await expect(await page.evaluate(() => window.PixelPandemonium.__test.formatPageRanges([{ col: 0, row: 0 }, { col: 0, row: 1 }, { col: 1, row: 0 }]))).toBe("A1-A2, B1");
 
   const statusBefore = await page.evaluate(() => window.PixelPandemonium.__test.getTileStatus(0, 0));
   expect(statusBefore).toBe("blank");
@@ -186,6 +196,22 @@ test("admin page reprompts when the teacher key is incorrect", async ({ page, re
   await expect(page).toHaveURL(new RegExp("teacherKey=" + instance.teacherKey));
 });
 
+test("admin page prompts for missing instance and admin code", async ({ page, request }) => {
+  const instance = await createInstance(request, "Admin Missing Codes", "eagles");
+  const prompts = [];
+  page.on("dialog", async (dialog) => {
+    prompts.push(dialog.message());
+    if (/instance code/i.test(dialog.message())) await dialog.accept(instance.instanceCode);
+    else if (/admin code/i.test(dialog.message())) await dialog.accept(instance.adminCode);
+    else if (/teacher access key/i.test(dialog.message())) await dialog.accept(instance.teacherKey);
+    else await dialog.accept("");
+  });
+  await page.goto("/admin.html?adminPassword=admin");
+  await expect(page.locator("#adminStatus")).toContainText("Admin access loaded");
+  expect(prompts.some((message) => /instance code/i.test(message))).toBeTruthy();
+  expect(prompts.some((message) => /admin code/i.test(message))).toBeTruthy();
+});
+
 test("replay page loads instance data and auto-finish controls", async ({ page, request }) => {
   const instance = await createInstance(request, "Replay Flow");
   const insert = await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/insert`, {
@@ -196,8 +222,11 @@ test("replay page loads instance data and auto-finish controls", async ({ page, 
 
   await page.goto(`/replay.html?instance=${encodeURIComponent(instance.instanceCode)}&key=${encodeURIComponent(instance.accessKey)}`);
   await expect(page.locator("#pictureTitle")).toContainText("Tetris");
+  await page.locator("#replayOrder").selectOption("random");
+  await page.locator("#replayDelayMs").fill("0");
   await expect(page.getByRole("button", { name: "Replay From Empty" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Auto Finish" })).toBeVisible();
+  await page.getByRole("button", { name: "Replay From Empty" }).click();
   await page.getByRole("button", { name: "Auto Finish" }).click();
   await expect(page.locator("#drawCanvas")).toBeVisible();
 });
@@ -219,6 +248,12 @@ test("dashboard reset clears only the selected instance", async ({ page, request
   await expect(page.locator("#resetInstanceCode")).toHaveValue(first.instanceCode);
   await expect(page.locator("#resetAdminCode")).toHaveValue(first.adminCode);
   await expect(page.locator("#resetTeacherKey")).toHaveValue(first.teacherKey);
+  await page.getByRole("button", { name: "Load Instances" }).click();
+  await expect(page.locator("#instancesList")).toContainText(first.instanceCode);
+  await page.locator("#instancesList tr", { hasText: first.instanceCode }).locator('button[data-action="load-instance"]').click();
+  await expect(page.locator("#dashboardAdminStatus")).toContainText("Loaded");
+  await page.locator("#animationOrder").selectOption("random");
+  await page.getByRole("button", { name: "Animate Finished Image" }).click();
   await page.getByRole("button", { name: "Reset Instance" }).click();
   await expect(page.locator("#resetResult")).toContainText("Instance reset");
 
@@ -242,14 +277,16 @@ test("admin page edits rows, reports incomplete and mistake pages, animates, and
 
   await page.goto(`/admin.html?instance=${encodeURIComponent(instance.instanceCode)}&teacherKey=${encodeURIComponent(instance.teacherKey)}&admin=${encodeURIComponent(instance.adminCode)}&adminPassword=admin`);
   await expect(page.locator("#adminStatus")).toContainText("Admin access loaded");
+  await page.getByRole("button", { name: "Load Instances" }).click();
+  await expect(page.locator("#instancesList")).toContainText(instance.instanceCode);
   await expect(page.locator("#adminTileSummary")).toContainText("Incomplete pages:");
-  await expect(page.locator("#adminTileSummary")).toContainText("A1");
+  await expect(page.locator("#adminTileSummary")).toContainText("A1-A5");
   await expect(page.locator("#adminTileSummary")).toContainText("Pages with mistakes:");
   await expect(page.locator("#adminTileSummary")).toContainText("A1");
-  await expect(page.locator(".admin-table tbody tr")).toHaveCount(1);
+  await expect(page.locator("#adminRows .admin-table tbody tr")).toHaveCount(1);
 
-  await page.locator('.admin-table textarea[data-role="data"]').fill("0,0,10,10,#00ff00,0,0");
-  await page.locator('.admin-table button[data-action="update"]').click();
+  await page.locator('#adminRows .admin-table textarea[data-role="data"]').fill("0,0,10,10,#00ff00,0,0");
+  await page.locator('#adminRows .admin-table button[data-action="update"]').click();
   await expect(page.locator("#adminStatus")).toContainText("Row updated");
 
   await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/insert`, {
@@ -257,11 +294,11 @@ test("admin page edits rows, reports incomplete and mistake pages, animates, and
     data: { data: "0,0,10,10,#111111,2,0", accessKey: instance.accessKey }
   });
   await page.getByRole("button", { name: "Refresh Rows" }).click();
-  await expect(page.locator(".admin-table tbody tr")).toHaveCount(2);
-  const rowToDelete = page.locator(".admin-table tbody tr", { hasText: "#111111" });
+  await expect(page.locator("#adminRows .admin-table tbody tr")).toHaveCount(2);
+  const rowToDelete = page.locator("#adminRows .admin-table tbody tr", { hasText: "#111111" });
   await rowToDelete.locator('button[data-action="delete"]').click();
   await expect(page.locator("#adminStatus")).toContainText("Row deleted");
-  await expect(page.locator(".admin-table tbody tr")).toHaveCount(1);
+  await expect(page.locator("#adminRows .admin-table tbody tr")).toHaveCount(1);
 
   await page.locator("#animationSource").selectOption("finished");
   await page.locator("#animationOrder").selectOption("existing-then-sequential");

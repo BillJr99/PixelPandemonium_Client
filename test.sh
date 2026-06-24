@@ -48,19 +48,28 @@ test -f teacher-dashboard.html
 test -f instructions.html
 test -f replay.html
 test -f admin.html
+test ! -f about.html
 test -f assets/js/pixel-pandemonium.js
 test -f assets/css/drawingcanvas.css
 
+grep -q "Directions:" index.html
+! grep -q "about.html" index.html
 grep -q "tileSelectorCanvas" instructions.html
 grep -q "Teacher Dashboard" teacher-dashboard.html
 grep -q "Deactivate Instance" admin.html
 grep -q "animationSource" admin.html
 grep -q "animationOrder" admin.html
+grep -q "Existing Instances" admin.html
+grep -q "Existing Instances" teacher-dashboard.html
 grep -q "Auto Finish" replay.html
+grep -q "replayDelayMs" replay.html
+grep -q "replayOrder" replay.html
 grep -q "initStudent" assets/js/pixel-pandemonium.js
 grep -q "initAdmin" assets/js/pixel-pandemonium.js
 grep -q "completedImageRows" assets/js/pixel-pandemonium.js
 grep -q "getTileStatus" assets/js/pixel-pandemonium.js
+grep -q "formatPageRanges" assets/js/pixel-pandemonium.js
+grep -q "fitAspectGridDimensions" assets/js/pixel-pandemonium.js
 grep -q "FFE0B2" assets/js/pixel-pandemonium.js
 grep -q "creationMode" teacher-dashboard.html
 grep -q "analyzeCustomPicture" assets/js/pixel-pandemonium.js
