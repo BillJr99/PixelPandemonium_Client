@@ -68,6 +68,36 @@ a {
   text-decoration: none;
 }
 
+.pp-nav-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #EBEDEC;
+  padding: 8px 12px;
+  font-family: "Old Standard TT", Arial, Helvetica, sans-serif;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.pp-nav-control label,
+.pp-nav-control span {
+  font: inherit;
+}
+
+.pp-nav-control input,
+.pp-nav-control select {
+  color: #111;
+  background: #fff;
+  border: 1px solid #EBEDEC;
+  border-radius: 0;
+  font: inherit;
+  padding: 5px 8px;
+}
+
+.pp-nav-control input[type="number"] {
+  width: 5em;
+}
+
 .page-wrap {
   padding: 18px;
 }

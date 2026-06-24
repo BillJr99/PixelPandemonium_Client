@@ -306,10 +306,10 @@
       state.picture = findPicture(pictureId);
     }
     if (!state.picture) showFatal("No pictures are configured.");
-    delete window.palette;
-    delete window.pages;
-    delete window.numRows;
-    delete window.numCols;
+    window.palette = undefined;
+    window.pages = undefined;
+    window.numRows = undefined;
+    window.numCols = undefined;
     await loadScript(scriptUrl(state.picture.script));
     state.palette = window.palette || [];
     state.pages = window.pages || [];
