@@ -1,14 +1,15 @@
 const { test, expect } = require("@playwright/test");
 const path = require("node:path");
 
-async function createInstance(request, teacherName = "Browser Test") {
+async function createInstance(request, teacherName = "Browser Test", pictureId = "tetris") {
+  const uniqueTeacherName = Math.random().toString(36).slice(2, 6) + " " + teacherName;
   const response = await request.post("http://127.0.0.1:8000/instance/create", {
     headers: {
       Origin: "http://localhost:4000"
     },
     data: {
-      pictureId: "tetris",
-      teacherName,
+      pictureId,
+      teacherName: uniqueTeacherName,
       dateTime: "2026-06-23T14:00:00",
       expirationHours: 1
     }
@@ -22,17 +23,52 @@ test("teacher dashboard creates an instance and renders URLs plus QR codes", asy
   await expect(page.getByRole("heading", { name: "Teacher Dashboard" })).toBeVisible();
 
   await page.locator("#pictureId").selectOption("tetris");
+  await page.locator("#instanceName").fill("browser-" + Math.random().toString(36).slice(2, 8));
   await page.locator("#teacherName").fill("Browser Teacher");
   await page.locator("#dateTime").fill("2026-06-23T14:00");
   await page.locator("#expirationHours").fill("1");
   await page.getByRole("button", { name: "Create Instance" }).click();
 
   await expect(page.locator("#createResult")).toContainText("Instance created");
-  await expect(page.locator("#createResult input").nth(0)).toHaveValue(/instructions\.html\?instance=/);
-  await expect(page.locator("#createResult input").nth(1)).toHaveValue(/replay\.html\?instance=/);
-  await expect(page.locator("#createResult input").nth(2)).toHaveValue(/admin\.html\?instance=/);
+  await expect(page.locator("#createResult")).toContainText("Instance Name:");
+  await expect(page.locator("#createResult input").nth(0)).toHaveValue(/instructions\.html\?instance=.*&key=/);
+  await expect(page.locator("#createResult input").nth(1)).toHaveValue(/replay\.html\?instance=.*&key=/);
+  await expect(page.locator("#createResult input").nth(2)).toHaveValue(/teacher-dashboard\.html\?instance=.*&teacherKey=.*&admin=/);
+  await expect(page.locator("#createResult input").nth(3)).toHaveValue(/admin\.html\?instance=.*&teacherKey=.*&admin=/);
   await expect(page.locator("#createResult img[alt='Student QR']")).toBeVisible();
   await expect(page.locator("#createResult img[alt='Teacher QR']")).toBeVisible();
+});
+
+test("teacher dashboard rejects duplicate instance names", async ({ page }) => {
+  const instanceName = "duplicate-" + Math.random().toString(36).slice(2, 8);
+  await page.goto("/teacher-dashboard.html");
+  await page.locator("#pictureId").selectOption("tetris");
+  await page.locator("#instanceName").fill(instanceName);
+  await page.locator("#teacherName").fill("Duplicate First");
+  await page.locator("#dateTime").fill("2026-06-23T14:00");
+  await page.locator("#expirationHours").fill("1");
+  await page.getByRole("button", { name: "Create Instance" }).click();
+  await expect(page.locator("#createResult")).toContainText("Instance created");
+
+  await page.goto("/teacher-dashboard.html");
+  await page.locator("#pictureId").selectOption("tetris");
+  await page.locator("#instanceName").fill(instanceName);
+  await page.locator("#teacherName").fill("Duplicate Second");
+  await page.locator("#dateTime").fill("2026-06-23T15:00");
+  await page.locator("#expirationHours").fill("1");
+  await page.getByRole("button", { name: "Create Instance" }).click();
+  await expect(page.locator("#createResult")).toContainText("Instance name already exists");
+});
+
+test("teacher dashboard rejects the reserved tetris instance name", async ({ page }) => {
+  await page.goto("/teacher-dashboard.html");
+  await page.locator("#pictureId").selectOption("tetris");
+  await page.locator("#instanceName").fill("tetris");
+  await page.locator("#teacherName").fill("Reserved Name");
+  await page.locator("#dateTime").fill("2026-06-23T16:00");
+  await page.locator("#expirationHours").fill("1");
+  await page.getByRole("button", { name: "Create Instance" }).click();
+  await expect(page.locator("#createResult")).toContainText("Instance name is reserved");
 });
 
 test("teacher dashboard creates an instance from uploaded posterizer spec files", async ({ page }) => {
@@ -58,6 +94,7 @@ test("teacher dashboard creates an instance from uploaded posterizer spec files"
 
 test("teacher dashboard creates an image-first instance with dimension and palette remapping", async ({ page }) => {
   await page.goto("/teacher-dashboard.html?adminPassword=admin");
+  await expect(await page.evaluate(() => window.PixelPandemonium.__test.fitAspectDimensions(576, 216, 100, 36))).toEqual({ width: 96, height: 36 });
   await page.locator("#creationMode").selectOption("image");
   await page.locator("#customTitle").fill("Browser Image Custom");
   await page.locator("#imageFile").setInputFiles(path.join(process.cwd(), "files/drawingcanvas-tetris/tetris.gif"));
@@ -96,7 +133,7 @@ test("teacher dashboard blocks incomplete spec uploads with missing-data guidanc
 
 test("student page validates an instance, auto-selects a tile, submits a wrong pixel, and marks tile amber", async ({ page, request }) => {
   const instance = await createInstance(request, "Student Flow");
-  await page.goto(`/instructions.html?instance=${encodeURIComponent(instance.instanceCode)}`);
+  await page.goto(`/instructions.html?instance=${encodeURIComponent(instance.instanceCode)}&key=${encodeURIComponent(instance.accessKey)}`);
 
   await expect(page.locator("#pictureTitle")).toContainText("Tetris");
   await expect(page.locator("#tileSelectorCanvas")).toBeVisible();
@@ -114,7 +151,7 @@ test("student page validates an instance, auto-selects a tile, submits a wrong p
   }).toBe("error");
 
   await expect.poll(async () => {
-    const retrieve = await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/retrieve`, {
+    const retrieve = await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/retrieve?key=${encodeURIComponent(instance.accessKey)}`, {
       headers: { Origin: "http://localhost:4000" }
     });
     expect(retrieve.ok()).toBeTruthy();
@@ -123,15 +160,41 @@ test("student page validates an instance, auto-selects a tile, submits a wrong p
   }).toBeGreaterThan(0);
 });
 
+test("student page reprompts when the class key is incorrect", async ({ page, request }) => {
+  const instance = await createInstance(request, "Student Prompt Flow", "eagles");
+  const prompts = [];
+  page.on("dialog", async (dialog) => {
+    prompts.push(dialog.message());
+    await dialog.accept(instance.accessKey);
+  });
+  await page.goto(`/instructions.html?instance=${encodeURIComponent(instance.instanceCode)}&key=WRONG`);
+  await expect(page.locator("#pictureTitle")).toContainText("Eagles");
+  await expect.poll(() => prompts.length).toBe(1);
+  await expect(page).toHaveURL(new RegExp("key=" + instance.accessKey));
+});
+
+test("admin page reprompts when the teacher key is incorrect", async ({ page, request }) => {
+  const instance = await createInstance(request, "Teacher Prompt Flow", "eagles");
+  const prompts = [];
+  page.on("dialog", async (dialog) => {
+    prompts.push(dialog.message());
+    await dialog.accept(instance.teacherKey);
+  });
+  await page.goto(`/admin.html?instance=${encodeURIComponent(instance.instanceCode)}&teacherKey=WRONG&admin=${encodeURIComponent(instance.adminCode)}&adminPassword=admin`);
+  await expect(page.locator("#adminStatus")).toContainText("Admin access loaded");
+  await expect.poll(() => prompts.length).toBe(1);
+  await expect(page).toHaveURL(new RegExp("teacherKey=" + instance.teacherKey));
+});
+
 test("replay page loads instance data and auto-finish controls", async ({ page, request }) => {
   const instance = await createInstance(request, "Replay Flow");
   const insert = await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/insert`, {
     headers: { Origin: "http://localhost:4000" },
-    data: { data: "0,0,10,10,#000000,0,0" }
+    data: { data: "0,0,10,10,#000000,0,0", accessKey: instance.accessKey }
   });
   expect(insert.ok()).toBeTruthy();
 
-  await page.goto(`/replay.html?instance=${encodeURIComponent(instance.instanceCode)}`);
+  await page.goto(`/replay.html?instance=${encodeURIComponent(instance.instanceCode)}&key=${encodeURIComponent(instance.accessKey)}`);
   await expect(page.locator("#pictureTitle")).toContainText("Tetris");
   await expect(page.getByRole("button", { name: "Replay From Empty" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Auto Finish" })).toBeVisible();
@@ -145,23 +208,24 @@ test("dashboard reset clears only the selected instance", async ({ page, request
 
   await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(first.instanceCode)}/insert`, {
     headers: { Origin: "http://localhost:4000" },
-    data: { data: "0,0,10,10,#000000,0,0" }
+    data: { data: "0,0,10,10,#000000,0,0", accessKey: first.accessKey }
   });
   await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(second.instanceCode)}/insert`, {
     headers: { Origin: "http://localhost:4000" },
-    data: { data: "0,0,10,10,#000000,0,0" }
+    data: { data: "0,0,10,10,#000000,0,0", accessKey: second.accessKey }
   });
 
-  await page.goto(`/teacher-dashboard.html?instance=${encodeURIComponent(first.instanceCode)}&admin=${encodeURIComponent(first.adminCode)}&adminPassword=admin`);
+  await page.goto(`/teacher-dashboard.html?instance=${encodeURIComponent(first.instanceCode)}&teacherKey=${encodeURIComponent(first.teacherKey)}&admin=${encodeURIComponent(first.adminCode)}&adminPassword=admin`);
   await expect(page.locator("#resetInstanceCode")).toHaveValue(first.instanceCode);
   await expect(page.locator("#resetAdminCode")).toHaveValue(first.adminCode);
+  await expect(page.locator("#resetTeacherKey")).toHaveValue(first.teacherKey);
   await page.getByRole("button", { name: "Reset Instance" }).click();
   await expect(page.locator("#resetResult")).toContainText("Instance reset");
 
-  const firstRows = await (await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(first.instanceCode)}/retrieve`, {
+  const firstRows = await (await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(first.instanceCode)}/retrieve?key=${encodeURIComponent(first.accessKey)}`, {
     headers: { Origin: "http://localhost:4000" }
   })).json();
-  const secondRows = await (await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(second.instanceCode)}/retrieve`, {
+  const secondRows = await (await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(second.instanceCode)}/retrieve?key=${encodeURIComponent(second.accessKey)}`, {
     headers: { Origin: "http://localhost:4000" }
   })).json();
 
@@ -173,10 +237,10 @@ test("admin page edits rows, reports incomplete and mistake pages, animates, and
   const instance = await createInstance(request, "Admin Flow");
   await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/insert`, {
     headers: { Origin: "http://localhost:4000" },
-    data: { data: "0,0,10,10,#000000,0,0" }
+    data: { data: "0,0,10,10,#000000,0,0", accessKey: instance.accessKey }
   });
 
-  await page.goto(`/admin.html?instance=${encodeURIComponent(instance.instanceCode)}&admin=${encodeURIComponent(instance.adminCode)}&adminPassword=admin`);
+  await page.goto(`/admin.html?instance=${encodeURIComponent(instance.instanceCode)}&teacherKey=${encodeURIComponent(instance.teacherKey)}&admin=${encodeURIComponent(instance.adminCode)}&adminPassword=admin`);
   await expect(page.locator("#adminStatus")).toContainText("Admin access loaded");
   await expect(page.locator("#adminTileSummary")).toContainText("Incomplete pages:");
   await expect(page.locator("#adminTileSummary")).toContainText("A1");
@@ -190,7 +254,7 @@ test("admin page edits rows, reports incomplete and mistake pages, animates, and
 
   await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/insert`, {
     headers: { Origin: "http://localhost:4000" },
-    data: { data: "0,0,10,10,#111111,2,0" }
+    data: { data: "0,0,10,10,#111111,2,0", accessKey: instance.accessKey }
   });
   await page.getByRole("button", { name: "Refresh Rows" }).click();
   await expect(page.locator(".admin-table tbody tr")).toHaveCount(2);
@@ -212,7 +276,7 @@ test("admin page edits rows, reports incomplete and mistake pages, animates, and
   await page.getByRole("button", { name: "Deactivate Instance" }).click();
   await expect(page.locator("#adminStatus")).toContainText("Instance deactivated");
 
-  const status = await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/status`, {
+  const status = await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/status?key=${encodeURIComponent(instance.accessKey)}`, {
     headers: { Origin: "http://localhost:4000" }
   });
   expect(status.status()).toBe(404);
@@ -221,4 +285,51 @@ test("admin page edits rows, reports incomplete and mistake pages, animates, and
     headers: { Origin: "http://localhost:4000" }
   })).json();
   expect(legacyRows.length).toBeGreaterThan(0);
+});
+
+test("public tetris demo is open to students and teacher reset but cannot be deactivated", async ({ page, request }) => {
+  await page.goto("/instructions.html?instance=tetris");
+  await expect(page.locator("#pictureTitle")).toContainText("Tetris");
+
+  await request.post("http://127.0.0.1:8000/instance/tetris/insert", {
+    headers: { Origin: "http://localhost:4000" },
+    data: { data: "0,0,10,10,#000000,0,0" }
+  });
+  await page.goto("/teacher-dashboard.html?instance=tetris");
+  await expect(page.locator("#resetInstanceCode")).toHaveValue("tetris");
+  await page.getByRole("button", { name: "Reset Instance" }).click();
+  await expect(page.locator("#resetResult")).toContainText("Instance reset");
+
+  await page.goto("/admin.html?instance=tetris");
+  await expect(page.locator("#adminStatus")).toContainText("Admin access loaded");
+  page.once("dialog", async (dialog) => {
+    await dialog.accept();
+  });
+  await page.getByRole("button", { name: "Deactivate Instance" }).click();
+  await expect(page.locator("#adminStatus")).toContainText("public Tetris demo cannot be deactivated");
+});
+
+test("admin page rotates class and teacher keys for secured instances", async ({ page, request }) => {
+  const instance = await createInstance(request, "Rotate Flow", "eagles");
+  await page.goto(`/admin.html?instance=${encodeURIComponent(instance.instanceCode)}&teacherKey=${encodeURIComponent(instance.teacherKey)}&admin=${encodeURIComponent(instance.adminCode)}&adminPassword=admin`);
+  await expect(page.locator("#adminStatus")).toContainText("Admin access loaded");
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Reset this class key");
+    await dialog.accept();
+  });
+  await page.getByRole("button", { name: "Reset Class Key" }).click();
+  await expect(page.locator("#adminStatus")).toContainText("Reset class key");
+  const oldStatus = await request.get(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/status?key=${encodeURIComponent(instance.accessKey)}`, {
+    headers: { Origin: "http://localhost:4000" }
+  });
+  expect(oldStatus.status()).toBe(403);
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Reset this teacher key");
+    await dialog.accept();
+  });
+  await page.getByRole("button", { name: "Reset Teacher Key" }).click();
+  await expect(page.locator("#adminStatus")).toContainText("Reset teacher key");
+  await expect(page).toHaveURL(/teacherKey=/);
 });

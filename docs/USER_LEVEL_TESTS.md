@@ -6,16 +6,25 @@ Run these with the server at `http://localhost:8000` and the client at `http://1
 
 1. Open `teacher-dashboard.html`.
 2. Select `Demo (Tetris)`.
-3. Enter a teacher name, date/time, and expiration.
+3. Optionally enter a unique instance name, then enter a teacher name, date/time, and expiration.
 4. Click `Create Instance`.
 5. Confirm the page shows:
    - instance code
    - expiration timestamp
    - student URL
    - replay URL
+   - teacher URL
    - admin URL
    - student QR code
    - teacher/admin QR code
+6. Confirm the student URL includes `key=` and is the link to share with students for this instance.
+7. Confirm the teacher/admin URLs include `teacherKey=`.
+
+## Duplicate Instance Name
+
+1. Create an instance with a custom instance name.
+2. Try to create another instance with the same instance name.
+3. Confirm the dashboard rejects it with an `Instance name already exists` error.
 
 ## Teacher Creates A Spec-First Custom Instance
 
@@ -61,6 +70,17 @@ Run these with the server at `http://localhost:8000` and the client at `http://1
 4. Confirm one tile is auto-selected.
 5. Confirm the student instruction table and color palette appear.
 
+## Missing Or Incorrect Keys
+
+1. Remove `key=...` from a student URL and open it.
+2. Confirm the page prompts for the class access key, then resumes after you enter it.
+3. Change `key=...` in a student URL to a wrong value and open it.
+4. Confirm the page prompts again for the class access key, then resumes after you enter the correct key.
+5. Remove `teacherKey=...` from an admin URL and open it.
+6. Confirm the page prompts for the teacher access key, then resumes after you enter it.
+7. Change `teacherKey=...` in an admin URL to a wrong value and open it.
+8. Confirm the page prompts again for the teacher access key, then resumes after you enter the correct key.
+
 ## Student Submits A Pixel
 
 1. Click a color in the palette.
@@ -90,10 +110,20 @@ Run these with the server at `http://localhost:8000` and the client at `http://1
 ## Reset
 
 1. Create an instance and submit at least one pixel.
-2. Open the admin URL or use the reset form with the instance/admin code.
+2. Open the admin URL or use the reset form with the instance/admin code and teacher key.
 3. Click `Reset Instance`.
 4. Reload the student and replay pages.
 5. Confirm the submitted pixels are gone and the same instance URL still works.
+
+## Rotate Keys
+
+1. Open the admin URL.
+2. Click `Reset Class Key`.
+3. Confirm the displayed student and replay links change.
+4. Confirm the old student URL no longer works and the new student URL does.
+5. Click `Reset Teacher Key`.
+6. Confirm the displayed teacher/admin links change and the current admin page URL is updated.
+7. Confirm the old teacher/admin URL no longer works and the new admin URL does.
 
 ## Auto Finish
 

@@ -151,8 +151,11 @@
   }
 
   function clientValidateCheckDigit(code) {
+    if (String(code || "").toLowerCase() === "tetris") return true;
     const digits = digitsOnly(code);
-    return digits.length >= 2 && luhnCheckDigit(digits.slice(0, -1)) === digits.slice(-1);
+    if (digits.length < 11) return false;
+    const suffix = digits.slice(-11);
+    return luhnCheckDigit(suffix.slice(0, -1)) === suffix.slice(-1);
   }
 
   function adminPassword() {
@@ -173,33 +176,70 @@
     return "&adminPassword=" + encodeURIComponent(adminPassword());
   }
 
-  async function validateInstance() {
+  function isTetrisDemoCode(code) {
+    return String(code || "").toLowerCase() === "tetris";
+  }
+
+  function promptForUrlKey(paramName, promptText) {
+    const params = new URLSearchParams(window.location.search);
+    const existing = params.get(paramName);
+    if (existing) return existing;
+    const entered = window.prompt(promptText);
+    if (!entered) showFatal("Missing required access key.");
+    params.set(paramName, entered.trim());
+    window.history.replaceState(null, "", window.location.pathname + "?" + params.toString() + window.location.hash);
+    return entered.trim();
+  }
+
+  function repromptUrlKey(paramName, promptText) {
+    const params = new URLSearchParams(window.location.search);
+    params.delete(paramName);
+    window.history.replaceState(null, "", window.location.pathname + "?" + params.toString() + window.location.hash);
+    return promptForUrlKey(paramName, promptText);
+  }
+
+  async function validateInstance(retried) {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("instance");
     if (!code) showFatal("No instance code in URL. Please use the URL your teacher gave you.");
+    const key = params.get("key") || "";
     if (!clientValidateCheckDigit(code)) showFatal("Invalid instance code. Please double-check the URL.");
-    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(code) + "/status"));
+    const keyQuery = key ? "?key=" + encodeURIComponent(key) : "";
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(code) + "/status" + keyQuery));
     const data = await res.json();
+    if (res.status === 403 && !retried) {
+      repromptUrlKey("key", "That class access key was not accepted. Enter the class access key:");
+      return validateInstance(true);
+    }
     if (!res.ok || !data.valid) showFatal(data.error || "This instance is no longer active.");
-    state.instance = data;
+    state.instance = { ...data, accessKey: key };
     return data;
   }
 
-  async function validateAdminInstance() {
+  async function validateAdminInstance(retried) {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("instance");
-    const admin = params.get("admin");
+    const admin = params.get("admin") || (isTetrisDemoCode(code) ? "tetris-demo" : "");
     if (!code || !admin) showFatal("Missing instance or admin code.");
+    const teacherKey = params.get("teacherKey") || "";
     if (!clientValidateCheckDigit(code)) showFatal("Invalid instance code. Please double-check the URL.");
-    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(code) + "/admin?admin=" + encodeURIComponent(admin) + adminQuery()));
+    const teacherKeyQuery = teacherKey ? "&teacherKey=" + encodeURIComponent(teacherKey) : "";
+    const passwordQuery = isTetrisDemoCode(code) ? "" : adminQuery();
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(code) + "/admin?admin=" + encodeURIComponent(admin) + teacherKeyQuery + passwordQuery));
     const data = await res.json();
+    if (res.status === 403 && /teacher key/i.test(data.error || "") && !retried) {
+      repromptUrlKey("teacherKey", "That teacher access key was not accepted. Enter the teacher access key:");
+      return validateAdminInstance(true);
+    }
     if (!res.ok) showFatal(data.error || "This admin URL is not valid.");
     state.instance = {
       ...data,
       instanceCode: code,
       adminCode: admin,
-      studentUrl: absoluteUrl("instructions.html?instance=" + encodeURIComponent(code)),
-      replayUrl: absoluteUrl("replay.html?instance=" + encodeURIComponent(code))
+      teacherKey,
+      accessKey: data.accessKey || "",
+      studentUrl: data.studentUrl || absoluteUrl("instructions.html?instance=" + encodeURIComponent(code) + "&key=" + encodeURIComponent(data.accessKey || "")),
+      replayUrl: data.replayUrl || absoluteUrl("replay.html?instance=" + encodeURIComponent(code) + "&key=" + encodeURIComponent(data.accessKey || ""))
     };
     return state.instance;
   }
@@ -337,7 +377,7 @@
   }
 
   async function retrieveReplay() {
-    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/retrieve"));
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/retrieve?key=" + encodeURIComponent(state.instance.accessKey || "")));
     if (!res.ok) throw new Error("Retrieve failed");
     const rows = await res.json();
     resetFilled();
@@ -351,7 +391,7 @@
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: message })
+      body: JSON.stringify({ data: message, accessKey: state.instance.accessKey || "" })
     });
     if (!res.ok) {
       const responseText = await res.text().catch(() => "");
@@ -798,6 +838,16 @@
     };
   }
 
+  function fitAspectDimensions(sourceWidth, sourceHeight, maxWidth, maxHeight) {
+    const sourceAspect = sourceWidth / sourceHeight;
+    const boxAspect = maxWidth / maxHeight;
+    let width = maxWidth;
+    let height = maxHeight;
+    if (boxAspect > sourceAspect) width = Math.max(1, Math.round(maxHeight * sourceAspect));
+    else height = Math.max(1, Math.round(maxWidth / sourceAspect));
+    return { width, height };
+  }
+
   function parsePaletteText(text) {
     return String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
       const parts = line.replace(/[#[\]]/g, "").split(/[,\s]+/).filter(Boolean).map(Number);
@@ -1036,13 +1086,14 @@
     populateDimensionPresets(img.naturalWidth, img.naturalHeight);
     const dims = selectedDimensions();
     if (!dims.width || !dims.height) throw new Error("Choose output dimensions");
+    const fitted = fitAspectDimensions(img.naturalWidth, img.naturalHeight, dims.width, dims.height);
     const canvas = document.createElement("canvas");
-    canvas.width = dims.width;
-    canvas.height = dims.height;
+    canvas.width = fitted.width;
+    canvas.height = fitted.height;
     const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(img, 0, 0, dims.width, dims.height);
-    const imageData = ctx.getImageData(0, 0, dims.width, dims.height);
+    ctx.drawImage(img, 0, 0, fitted.width, fitted.height);
+    const imageData = ctx.getImageData(0, 0, fitted.width, fitted.height);
     let palette = parsePaletteText(document.getElementById("paletteEditor").value);
     if (!palette.length) {
       palette = autoPaletteFromPixels(imageData.data, 12);
@@ -1052,7 +1103,7 @@
     for (let i = 0; i < imageData.data.length; i += 4) {
       indexes.push(nearestPaletteIndex([imageData.data[i], imageData.data[i + 1], imageData.data[i + 2]], palette));
     }
-    return validateClientSpec(specFromIndexedPixels(indexes, dims.width, dims.height, palette));
+    return validateClientSpec(specFromIndexedPixels(indexes, fitted.width, fitted.height, palette));
   }
 
   async function analyzeCustomPicture() {
@@ -1107,7 +1158,8 @@
     const params = new URLSearchParams(window.location.search);
     if (params.get("instance")) {
       document.getElementById("resetInstanceCode").value = params.get("instance");
-      document.getElementById("resetAdminCode").value = params.get("admin") || "";
+      document.getElementById("resetAdminCode").value = params.get("admin") || (isTetrisDemoCode(params.get("instance")) ? "tetris-demo" : "");
+      document.getElementById("resetTeacherKey").value = params.get("teacherKey") || "";
     }
 
     function syncMode() {
@@ -1189,6 +1241,7 @@
         const pictureId = await ensureCustomPicture();
         const body = {
           pictureId,
+          instanceName: document.getElementById("instanceName").value,
           teacherName: document.getElementById("teacherName").value,
           dateTime: document.getElementById("dateTime").value,
           expirationHours: Number(document.getElementById("expirationHours").value)
@@ -1213,10 +1266,15 @@
       event.preventDefault();
       const code = document.getElementById("resetInstanceCode").value;
       const adminCode = document.getElementById("resetAdminCode").value;
+      const teacherKey = document.getElementById("resetTeacherKey").value;
       const res = await fetch(serverUrl("/instance/" + encodeURIComponent(code) + "/reset"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adminCode, adminPassword: adminPassword() })
+        body: JSON.stringify({
+          adminCode,
+          teacherKey,
+          adminPassword: isTetrisDemoCode(code) ? "" : adminPassword()
+        })
       });
       const data = await res.json();
       setHtml("resetResult", res.ok ? '<p class="ok">Instance reset.</p>' : '<p class="error">' + (data.error || "Reset failed") + "</p>");
@@ -1224,7 +1282,8 @@
   }
 
   async function adminFetchRows() {
-    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/admin?admin=" + encodeURIComponent(state.instance.adminCode) + adminQuery()));
+    const passwordQuery = isTetrisDemoCode(state.instance.instanceCode) ? "" : adminQuery();
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/admin?admin=" + encodeURIComponent(state.instance.adminCode) + "&teacherKey=" + encodeURIComponent(state.instance.teacherKey || "") + passwordQuery));
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Admin fetch failed");
     resetFilled();
@@ -1280,20 +1339,59 @@
     rowsFromFilled().forEach((row) => drawReplayMessage(row.DATA));
   }
 
+  function updateAdminLinks() {
+    document.getElementById("studentLink").href = state.instance.studentUrl;
+    document.getElementById("studentLink").textContent = state.instance.studentUrl;
+    document.getElementById("replayLink").href = state.instance.replayUrl;
+    document.getElementById("replayLink").textContent = state.instance.replayUrl;
+    const teacherLink = document.getElementById("teacherLink");
+    if (teacherLink) {
+      teacherLink.href = state.instance.teacherUrl;
+      teacherLink.textContent = state.instance.teacherUrl;
+    }
+  }
+
+  async function rotateInstanceKey(keyType) {
+    const label = keyType === "student" ? "class key" : "teacher key";
+    if (!window.confirm("Reset this " + label + "? Old links using that key will stop working.")) return;
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/rotate-key"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        keyType,
+        adminCode: state.instance.adminCode,
+        teacherKey: state.instance.teacherKey || "",
+        adminPassword: adminPassword()
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setHtml("adminStatus", '<p class="error">' + (data.error || "Key reset failed") + "</p>");
+      return;
+    }
+    state.instance = { ...state.instance, ...data };
+    if (keyType === "teacher") {
+      const params = new URLSearchParams(window.location.search);
+      params.set("teacherKey", data.teacherKey);
+      window.history.replaceState(null, "", window.location.pathname + "?" + params.toString() + window.location.hash);
+    }
+    updateAdminLinks();
+    setHtml("adminStatus", '<p class="ok">Reset ' + label + ".</p>");
+  }
+
   async function initAdmin() {
     await loadConfig();
     await validateAdminInstance();
     await loadPicture(state.instance.pictureId);
     setText("pictureTitle", state.picture.title);
     setText("instanceCode", state.instance.instanceCode);
-    document.getElementById("studentLink").href = state.instance.studentUrl;
-    document.getElementById("studentLink").textContent = state.instance.studentUrl;
-    document.getElementById("replayLink").href = state.instance.replayUrl;
-    document.getElementById("replayLink").textContent = state.instance.replayUrl;
+    updateAdminLinks();
     setHtml("adminStatus", '<p class="ok">Admin access loaded for ' + state.instance.teacherName + ".</p>");
     await refreshAdmin();
 
     document.getElementById("refreshRowsButton").addEventListener("click", refreshAdmin);
+    document.getElementById("rotateStudentKeyButton").addEventListener("click", () => rotateInstanceKey("student"));
+    document.getElementById("rotateTeacherKeyButton").addEventListener("click", () => rotateInstanceKey("teacher"));
     document.getElementById("adminReplayButton").addEventListener("click", async () => {
       const rows = await adminFetchRows();
       const source = document.getElementById("animationSource").value;
@@ -1319,7 +1417,7 @@
       const res = await fetch(serverUrl("/instance/" + encodeURIComponent(state.instance.instanceCode) + "/deactivate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adminCode: state.instance.adminCode, adminPassword: adminPassword() })
+        body: JSON.stringify({ adminCode: state.instance.adminCode, teacherKey: state.instance.teacherKey || "", adminPassword: adminPassword() })
       });
       const data = await res.json();
       setHtml("adminStatus", res.ok ? '<p class="ok">Instance deactivated. Replay data was preserved.</p>' : '<p class="error">' + (data.error || "Deactivate failed") + "</p>");
@@ -1331,7 +1429,7 @@
       const id = rowEl.dataset.rowId;
       const action = button.dataset.action;
       const endpoint = "/instance/" + encodeURIComponent(state.instance.instanceCode) + "/event/" + encodeURIComponent(id) + "/" + action;
-      const body = { adminCode: state.instance.adminCode, adminPassword: adminPassword() };
+      const body = { adminCode: state.instance.adminCode, teacherKey: state.instance.teacherKey || "", adminPassword: adminPassword() };
       if (action === "update") body.data = rowEl.querySelector('textarea[data-role="data"]').value;
       const res = await fetch(serverUrl(endpoint), {
         method: "POST",
@@ -1353,9 +1451,11 @@
       '<div class="panel">',
       '<p class="ok">Instance created.</p>',
       '<p><strong>Instance Code:</strong> <span class="mono">' + data.instanceCode + "</span></p>",
+      '<p><strong>Instance Name:</strong> <span class="mono">' + (data.instanceName || data.instanceCode) + "</span></p>",
       '<p><strong>Expires:</strong> ' + data.expiresAt + "</p>",
       '<label>Student URL<br><input class="url-box" readonly value="' + data.studentUrl + '"></label>',
       '<br><label>Replay URL<br><input class="url-box" readonly value="' + data.replayUrl + '"></label>',
+      '<br><label>Teacher URL<br><input class="url-box" readonly value="' + data.teacherUrl + '"></label>',
       '<br><label>Admin URL<br><input class="url-box" readonly value="' + data.adminUrl + '"></label>',
       '<div class="qr-row">',
       '<div><h3>Student QR</h3><img alt="Student QR" src="' + qrUrl(data.studentUrl) + '"></div>',
@@ -1365,6 +1465,7 @@
     ].join(""));
     document.getElementById("resetInstanceCode").value = data.instanceCode;
     document.getElementById("resetAdminCode").value = data.adminCode;
+    document.getElementById("resetTeacherKey").value = data.teacherKey || "";
   }
 
   async function initStudent() {
@@ -1430,6 +1531,7 @@
       luhnCheckDigit,
       rgbToHex,
       getTileStatus: function (row, col) { return getTileStatus(row, col); },
+      fitAspectDimensions,
       state
     }
   };

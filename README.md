@@ -1,6 +1,6 @@
 # Pixel Pandemonium Client
 
-Standalone static frontend for Pixel Pandemonium. It is extracted from the CS173 DrawingCanvas/Replay app and preserves the existing visual style, table-based instruction layout, canvas presentation, colors, and navigation treatment.
+Standalone static frontend for Pixel Pandemonium. It provides teacher dashboards, student tile entry, replay animation, admin review, and custom image/spec workflows.
 
 The deployable branch is `gh-pages` for GitHub Pages hosting.
 
@@ -89,11 +89,17 @@ Create or review the server `.env`:
 ```bash
 ADMIN_PASSWORD=admin
 DOWNLOAD_TOKEN=change-me-before-deploying
+AUTH_FAILURE_LIMIT=5
+AUTH_FAILURE_WINDOW_MINUTES=10
+AUTH_BAN_DAYS=1
 ```
 
 - `ADMIN_PASSWORD` is required for teacher/admin operations such as reset,
   deactivate, replay-row editing, custom picture upload, and admin inspection.
 - `DOWNLOAD_TOKEN` is used only for the protected `/download` replay-data export.
+- `AUTH_FAILURE_LIMIT`, `AUTH_FAILURE_WINDOW_MINUTES`, and `AUTH_BAN_DAYS`
+  control server-side temporary IP bans after repeated bad class keys, teacher
+  keys, admin codes, or admin passwords.
 
 When the server starts, it checks for `.env` and required keys. If the file or a
 required key is missing in an interactive terminal, the server prompts for values
@@ -116,12 +122,28 @@ Also confirm these server/client settings:
 
 1. Open `teacher-dashboard.html`.
 2. Leave `Picture Source` set to `Configured picture`.
-3. Pick a picture, enter teacher name, date/time, and expiration hours.
+3. Pick a picture, optionally enter a unique instance name, then enter teacher
+   name, date/time, and expiration hours.
 4. Click `Create Instance`.
 5. Save or share the generated student URL, replay URL, and admin URL.
 
-The student and replay URLs are scoped to the generated instance code. Multiple
-teachers can use the same picture at the same time without sharing replay data.
+The student and replay URLs are scoped to the generated instance code. The
+student URL is the link teachers share with students for that particular
+instance. They also include a class key, so guessing only the instance code is
+not enough to access the activity. The teacher URL and admin URL include a
+separate teacher key, so teacher/admin actions require the actual teacher link
+or admin access. Instance names must be unique; if left blank, the generated
+instance code is used as the unique name. The name `tetris` is reserved for the
+built-in public demo. Multiple teachers can use the same picture at the same
+time without sharing replay data.
+
+The main page links directly to the public Tetris demo:
+
+- `instructions.html?instance=tetris` lets anyone contribute as a student.
+- `teacher-dashboard.html?instance=tetris` lets a teacher reset the demo.
+
+The public Tetris demo does not require class or teacher keys. It cannot be
+deactivated or deleted.
 
 ### 3. Create An Instance From Existing Posterizer Specs
 
@@ -147,6 +169,8 @@ list.
 3. Upload a GIF, PNG, JPEG, or WebP.
 4. Choose an output dimension. The menu is derived from dimensions already used
    by configured pictures and marks the closest match to the uploaded image.
+   The selected size is treated as a bounding box: the image is downsampled to
+   fit without changing its aspect ratio, then padded to complete `5x3` pages.
 5. Choose `Custom` or edit width/height for a different output size.
 6. Leave the palette blank to auto-extract common colors, or enter one RGB color
    per line.
@@ -163,6 +187,12 @@ spec to the server.
 Students open the generated student URL. The page validates the instance, loads
 the configured or custom picture spec, auto-selects an available tile, and shows
 the palette plus the 15-pixel tile grid.
+
+If the class key is missing from a student or replay URL, the client prompts for
+it, adds `key=...` to the current URL, and resumes loading. If the class key is
+incorrect, the client prompts again and retries once. The server enforces this
+key on status, insert, and retrieve API calls, except for the built-in public
+Tetris demo.
 
 Students click a palette color, then click a sub-pixel in the tile canvas. Their
 submissions are saved to the instance and sent over realtime updates. Wrong-color
@@ -188,13 +218,24 @@ The admin page has additional animation controls:
 Open the generated admin URL and provide the server `ADMIN_PASSWORD` when
 prompted, or include `adminPassword=...` in the URL for local demos.
 
+If the teacher key is missing from a teacher/admin URL, the client prompts for
+it, adds `teacherKey=...` to the current URL, and resumes loading. If the
+teacher key is incorrect, the client prompts again and retries once. The server
+enforces the teacher key on reset, admin inspection, row edit/delete,
+deactivation, and key rotation API calls, except for resetting the built-in
+public Tetris demo.
+
 Admin tools include:
 
 - Student and replay links.
+- Teacher dashboard link.
 - Incomplete page and mistake summaries.
 - Replay row refresh, edit, and delete.
 - Instance reset.
 - Instance deactivation.
+- Class key reset, which invalidates old student/replay links.
+- Teacher key reset, which invalidates old teacher/admin links and updates the
+  current admin URL.
 - Animation from submitted data or from the finished product.
 
 The admin page cannot view, create, or modify the server `.env`. Missing or
@@ -238,6 +279,8 @@ For GitHub Pages, the server must be deployed separately. The static client cann
   spec.
 - Dashboard displays student, replay, and admin URLs plus QR codes.
 - The generated student URL is the URL students use to participate.
+- The generated student and replay URLs include the class key.
+- The generated teacher/admin URLs include the separate teacher key.
 - The generated admin URL opens `admin.html` for the selected instance.
 - Students open the student URL and get the correct picture from instance metadata.
 - Students use the clickable tile selector instead of row/column dropdowns.
@@ -247,12 +290,16 @@ For GitHub Pages, the server must be deployed separately. The static client cann
 - Teacher opens the replay URL and sees the image rebuild from replay data.
 - Teacher can auto-finish the replay from the expected image data.
 - Teacher can reset an instance with the admin URL/code.
+- Teacher/admin can rotate the class key or teacher key from the admin page.
 - Admin page shows incomplete pages and pages with mistakes.
 - Admin page can edit or delete individual replay rows.
 - Admin page can deactivate an instance. Deactivation preserves replay rows but makes the instance unavailable to students and normal replay/status pages.
 - Admin page can generate a time-lapse from instance data in student completion order or random order.
 - Admin page can generate a finished-product time-lapse even if the activity is incomplete, using existing student work first and then filling missing pixels sequentially or randomly.
 - Multiple teachers can run the same picture at once because all data is instance-scoped.
+- The public Tetris demo is always available at `instance=tetris`, accepts
+  student contributions without a key, can be reset by teachers without a key,
+  and cannot be deactivated.
 
 ## Custom Picture Workflow
 
@@ -262,9 +309,10 @@ The dashboard supports two custom creation paths:
   together with a ColorMap file. If the files are incomplete, the dashboard shows
   what is missing and blocks instance creation.
 - Image-first: upload a GIF, PNG, JPEG, or WebP image. The browser downsamples
-  the image to the selected output dimensions, maps every pixel to the nearest
-  palette color, pads the result to complete `5x3` pages, and builds the same
-  runtime spec used by the original composite JS files.
+  the image within the selected output dimensions without changing aspect ratio,
+  maps every pixel to the nearest palette color, pads the result to complete
+  `5x3` pages, and builds the same runtime spec used by the original composite
+  JS files.
 
 Dimension controls:
 
@@ -406,7 +454,7 @@ status, response body, instance code, and pixel payload. Match the response
 
 ## Styling Policy
 
-New controls intentionally extend the original DrawingCanvas style:
+New controls intentionally match the existing classroom activity style:
 
 - blue navigation bar
 - gray top banner
