@@ -18,7 +18,7 @@ const FINAL_PAUSE_MS = Number(process.env.DEMO_FINAL_PAUSE_MS || 20000);
 const SLOW_MO_MS = Number(process.env.DEMO_SLOW_MO_MS || 120);
 
 const root = new URL("..", `file://${__dirname}/`).pathname;
-const serverRoot = new URL("../../Pixel_Pandemonium_server/", `file://${__dirname}/`).pathname;
+const serverRoot = new URL("../../PixelPandemonium_Server/", `file://${__dirname}/`).pathname;
 const startedProcesses = [];
 
 function sleep(ms) {

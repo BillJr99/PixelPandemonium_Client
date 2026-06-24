@@ -17,9 +17,9 @@ trap cleanup EXIT
 
 echo "Checking configured server: $SERVER_URL"
 if ! curl -fsS "$SERVER_URL/health" >/dev/null 2>&1; then
-  if [ -f ../Pixel_Pandemonium_server/package.json ]; then
+  if [ -f ../PixelPandemonium_Server/package.json ]; then
     echo "Starting sibling server for client smoke tests."
-    (cd ../Pixel_Pandemonium_server && npm start) >/tmp/pixel-pandemonium-client-server.log 2>&1 &
+    (cd ../PixelPandemonium_Server && npm start) >/tmp/pixel-pandemonium-client-server.log 2>&1 &
     SERVER_PID="$!"
   else
     echo "Start the Pixel Pandemonium server at $SERVER_URL, then press Enter."

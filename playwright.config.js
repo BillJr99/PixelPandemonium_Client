@@ -12,7 +12,7 @@ module.exports = defineConfig({
   },
   webServer: [
     {
-      command: "cd ../Pixel_Pandemonium_server && npm start",
+      command: "cd ../PixelPandemonium_Server && npm start",
       url: "http://127.0.0.1:8000/health",
       reuseExistingServer: true,
       timeout: 30_000

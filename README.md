@@ -10,6 +10,12 @@ The deployable branch is `gh-pages` for GitHub Pages hosting.
 - Ruby/Jekyll for local static-site testing
 - Optional: GitHub Pages for production hosting
 
+Restore Node dependencies after cloning or after removing `node_modules`:
+
+```bash
+npm install
+```
+
 Install Jekyll dependencies:
 
 ```bash
@@ -42,7 +48,7 @@ Use two terminals for local end-to-end testing.
 Terminal 1, start the server locally:
 
 ```bash
-cd ../Pixel_Pandemonium_server
+cd ../PixelPandemonium_Server
 npm install
 npm start
 ```
@@ -88,7 +94,7 @@ Example production config values:
 ```yaml
 server_url: https://your-worker-or-node-host.example.com
 realtime_url: https://your-worker-or-node-host.example.com
-base_url: https://your-github-user.github.io/PixelPandemonium_client
+base_url: https://your-github-user.github.io/PixelPandemonium_Client
 ```
 
 For GitHub Pages, the server must be deployed separately. The static client cannot store replay data by itself.
@@ -172,7 +178,7 @@ already running.
 
 Demo mode notes:
 
-- Start from a clean terminal in `PixelPandemonium_client`.
+- Start from a clean terminal in `PixelPandemonium_Client`.
 - Use a projector or screen share that can show the teacher/admin browser window.
 - The script opens three student windows and switches between them as each page
   is completed.
