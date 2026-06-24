@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const path = require("node:path");
 
-async function createInstance(request, teacherName = "Browser Test", pictureId = "tetris") {
+async function createInstance(request, teacherName = "Browser Test", pictureId = "tetris", teacherAccessKey = "teacher") {
   const uniqueTeacherName = Math.random().toString(36).slice(2, 6) + " " + teacherName;
   const response = await request.post("http://127.0.0.1:8000/instance/create", {
     headers: {
@@ -12,11 +12,23 @@ async function createInstance(request, teacherName = "Browser Test", pictureId =
       teacherName: uniqueTeacherName,
       dateTime: "2026-06-23T14:00:00",
       expirationHours: 1,
-      teacherAccessKey: "teacher"
+      teacherAccessKey
     }
   });
   expect(response.ok()).toBeTruthy();
   return response.json();
+}
+
+async function ensureTeacherKey(request, teacherKey) {
+  const response = await request.post("http://127.0.0.1:8000/teacher-keys", {
+    headers: { Origin: "http://localhost:4000" },
+    data: {
+      teacherKey,
+      label: teacherKey,
+      adminPassword: "admin"
+    }
+  });
+  expect([201, 409]).toContain(response.status());
 }
 
 test("teacher dashboard creates an instance and renders URLs plus QR codes", async ({ page }) => {
@@ -144,8 +156,11 @@ test("student page validates an instance, auto-selects a tile, submits a wrong p
 
   await expect(page.locator("#pictureTitle")).toContainText("Tetris");
   await expect(page.locator("#tileSelectorCanvas")).toBeVisible();
-  await expect(page.locator("#tileSelectorCanvas")).toHaveAttribute("width", "720");
-  await expect(page.locator("#tileSelectorCanvas")).toHaveAttribute("height", "480");
+  await expect.poll(async () => page.evaluate(() => {
+    const canvas = document.getElementById("tileSelectorCanvas");
+    const testApi = window.PixelPandemonium.__test;
+    return canvas.width >= testApi.state.numCols * 68 && canvas.height >= testApi.state.numRows * 48;
+  })).toBe(true);
   await expect(page.locator("#drawCanvas")).toBeVisible();
   await expect(page.locator("#tileStatusText")).toContainText("Selected:");
   await expect(page.locator("#remainingPages")).toContainText("A1-A5");
@@ -228,6 +243,25 @@ test("admin page without an instance prompts only for the admin password and lis
   await page.locator("#newTeacherKeyLabel").fill("Duplicate Default");
   await page.getByRole("button", { name: "Create Teacher Key" }).click();
   await expect(page.locator("#teacherKeyStatus")).toContainText("Teacher key already exists");
+});
+
+test("teacher dashboard lists only instances created with that teacher key", async ({ page, request }) => {
+  const secondTeacherKey = "browser-teacher-" + Math.random().toString(36).slice(2, 8);
+  await ensureTeacherKey(request, secondTeacherKey);
+  const defaultOwned = await createInstance(request, "Default Owner", "tetris", "teacher");
+  const secondOwned = await createInstance(request, "Second Owner", "eagles", secondTeacherKey);
+
+  await page.goto("/teacher-dashboard.html?teacherAccessKey=teacher");
+  await page.waitForFunction(() => document.body.dataset.ppReady === "teacher-dashboard");
+  await page.getByRole("button", { name: "Load Instances" }).click();
+  await expect(page.locator("#instancesList")).toContainText(defaultOwned.instanceCode);
+  await expect(page.locator("#instancesList")).not.toContainText(secondOwned.instanceCode);
+
+  await page.goto(`/teacher-dashboard.html?teacherAccessKey=${encodeURIComponent(secondTeacherKey)}`);
+  await page.waitForFunction(() => document.body.dataset.ppReady === "teacher-dashboard");
+  await page.getByRole("button", { name: "Load Instances" }).click();
+  await expect(page.locator("#instancesList")).toContainText(secondOwned.instanceCode);
+  await expect(page.locator("#instancesList")).not.toContainText(defaultOwned.instanceCode);
 });
 
 test("replay page loads instance data and auto-finish controls", async ({ page, request }) => {

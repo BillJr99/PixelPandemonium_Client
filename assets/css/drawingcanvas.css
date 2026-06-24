@@ -158,6 +158,17 @@ canvas {
   image-rendering: pixelated;
 }
 
+.tile-selector-wrap {
+  max-width: 100%;
+  overflow: auto;
+}
+
+#tileSelectorCanvas {
+  border: 2px solid #333;
+  cursor: pointer;
+  display: block;
+}
+
 .tile-legend {
   display: flex;
   gap: 15px;

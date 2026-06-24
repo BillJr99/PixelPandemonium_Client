@@ -602,6 +602,12 @@
   function renderTileSelector() {
     const canvas = document.getElementById("tileSelectorCanvas");
     if (!canvas) return;
+    const minTileWidth = 68;
+    const minTileHeight = 48;
+    const wantedWidth = Math.max(720, state.numCols * minTileWidth);
+    const wantedHeight = Math.max(240, state.numRows * minTileHeight);
+    if (canvas.width !== wantedWidth) canvas.width = wantedWidth;
+    if (canvas.height !== wantedHeight) canvas.height = wantedHeight;
     const ctx = canvas.getContext("2d");
     const tileW = canvas.width / state.numCols;
     const tileH = canvas.height / state.numRows;
@@ -685,8 +691,11 @@
     const canvas = document.getElementById("tileSelectorCanvas");
     canvas.addEventListener("click", (event) => {
       const rect = canvas.getBoundingClientRect();
-      const col = Math.floor((event.clientX - rect.left) / (canvas.width / state.numCols));
-      const row = Math.floor((event.clientY - rect.top) / (canvas.height / state.numRows));
+      const x = (event.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (event.clientY - rect.top) * (canvas.height / rect.height);
+      const col = Math.floor(x / (canvas.width / state.numCols));
+      const row = Math.floor(y / (canvas.height / state.numRows));
+      if (row < 0 || col < 0 || row >= state.numRows || col >= state.numCols) return;
       if (getTileStatus(row, col) === "complete") {
         setText("tileStatusText", "Already complete.");
         return;
@@ -1943,6 +1952,7 @@
     });
     instanceListMode = "dashboard";
     attachInstanceListHandlers();
+    document.body.dataset.ppReady = "teacher-dashboard";
     document.getElementById("adminReplayButton").addEventListener("click", async () => {
       try {
         await runAdminAnimation(false);

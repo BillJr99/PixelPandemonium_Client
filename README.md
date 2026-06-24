@@ -101,8 +101,9 @@ AUTH_BAN_DAYS=1
 - `ADMIN_PASSWORD` is required for the admin page and admin-only APIs.
 - `DEFAULT_TEACHER_KEY` is the first global teacher key seeded by the server.
   Teachers need a global teacher key to create instances or list/administer
-  non-demo instances. Without one, the teacher dashboard can only work with the
-  public Tetris demo.
+  non-demo instances. Teachers only see and administer instances created with
+  that same global teacher key. Without one, the teacher dashboard can only work
+  with the public Tetris demo.
 - `DOWNLOAD_TOKEN` is used only for the protected `/download` replay-data export.
 - `AUTH_FAILURE_LIMIT`, `AUTH_FAILURE_WINDOW_MINUTES`, and `AUTH_BAN_DAYS`
   control server-side temporary IP bans after repeated bad class keys, teacher
@@ -246,9 +247,9 @@ The teacher dashboard has two top-level workflows:
   teacher key and is the only teacher-facing place to create new class
   instances.
 - `Administer Instance` opens `teacher-dashboard.html`, which lists, views,
-  animates, and resets existing instances after a valid global teacher key is
-  provided. Without a global teacher key, it can only load, view, and reset the
-  public Tetris demo.
+  animates, and resets instances created with the provided global teacher key.
+  Without a global teacher key, it can only load, view, and reset the public
+  Tetris demo.
 
 Admin tools include:
 
@@ -320,8 +321,8 @@ For GitHub Pages, the server must be deployed separately. The static client cann
 - Teacher can control replay animation speed and sequential/random order.
 - Teacher can auto-finish the replay from the expected image data.
 - Teacher opens `teacher-dashboard.html` to list, view, animate, and reset
-  existing instances. Without a global teacher key, only the public Tetris demo
-  can be viewed and reset.
+  instances created with their global teacher key. Without a global teacher key,
+  only the public Tetris demo can be viewed and reset.
 - Teacher/admin can rotate the class key or teacher key from the admin page.
 - Admin page shows incomplete pages and pages with mistakes.
 - Teacher dashboard and admin page can list existing instances and open the
