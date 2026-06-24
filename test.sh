@@ -6,6 +6,7 @@ cd "$ROOT"
 
 SERVER_URL="$(sed -n 's/^server_url:[[:space:]]*//p' config.yaml | head -n 1 | tr -d '"' | tr -d "'")"
 SERVER_URL="${SERVER_URL:-http://localhost:8000}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
 SERVER_PID=""
 
 cleanup() {
@@ -54,12 +55,27 @@ grep -q "initAdmin" assets/js/pixel-pandemonium.js
 grep -q "completedImageRows" assets/js/pixel-pandemonium.js
 grep -q "getTileStatus" assets/js/pixel-pandemonium.js
 grep -q "FFE0B2" assets/js/pixel-pandemonium.js
+grep -q "creationMode" teacher-dashboard.html
+grep -q "analyzeCustomPicture" assets/js/pixel-pandemonium.js
+grep -q "nearestPaletteIndex" assets/js/pixel-pandemonium.js
+grep -q "parseCompositeJs" assets/js/pixel-pandemonium.js
 
 CREATE_RESPONSE="$(curl -fsS -H "Origin: http://localhost:4000" -H "Content-Type: application/json" \
   -d '{"pictureId":"tetris","teacherName":"Client Test","dateTime":"2026-06-23T13:00:00","expirationHours":1}' \
   "$SERVER_URL/instance/create")"
 
 node -e "const d=JSON.parse(process.argv[1]); if(!d.studentUrl || !d.replayUrl || !/admin\\.html\\?instance=/.test(d.adminUrl) || !d.instanceCode) process.exit(1)" "$CREATE_RESPONSE"
+
+CUSTOM_RESPONSE="$(curl -fsS -H "Origin: http://localhost:4000" -H "Content-Type: application/json" \
+  -d "{\"title\":\"Client Smoke Custom\",\"adminPassword\":\"$ADMIN_PASSWORD\",\"spec\":{\"palette\":[[255,255,255],[0,0,0]],\"numRows\":1,\"numCols\":1,\"pages\":[{\"col\":\"A\",\"row\":\"1\",\"uncompressed\":[0,1,0,1,0,1,0,1,0,1,0,1,0,1,0]}]}}" \
+  "$SERVER_URL/pictures/custom")"
+CUSTOM_ID="$(node -e "const d=JSON.parse(process.argv[1]); if(!d.id || !d.zipUrl) process.exit(1); console.log(d.id)" "$CUSTOM_RESPONSE")"
+CUSTOM_CREATE="$(curl -fsS -H "Origin: http://localhost:4000" -H "Content-Type: application/json" \
+  -d "{\"pictureId\":\"$CUSTOM_ID\",\"teacherName\":\"Client Custom Test\",\"dateTime\":\"2026-06-23T13:00:00\",\"expirationHours\":1}" \
+  "$SERVER_URL/instance/create")"
+CUSTOM_CODE="$(node -e "const d=JSON.parse(process.argv[1]); if(!d.instanceCode) process.exit(1); console.log(d.instanceCode)" "$CUSTOM_CREATE")"
+curl -fsS -H "Origin: http://localhost:4000" "$SERVER_URL/instance/$CUSTOM_CODE/status" \
+  | node -e "const fs=require('fs'); const d=JSON.parse(fs.readFileSync(0,'utf8')); if(!d.pictureCustom || !d.pictureSpecUrl) process.exit(1)"
 
 if command -v bundle >/dev/null 2>&1 && [ -f Gemfile.lock ]; then
   if ! bundle exec jekyll build >/tmp/pixel-pandemonium-client-jekyll.log 2>&1; then

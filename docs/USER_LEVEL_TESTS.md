@@ -17,6 +17,42 @@ Run these with the server at `http://localhost:8000` and the client at `http://1
    - student QR code
    - teacher/admin QR code
 
+## Teacher Creates A Spec-First Custom Instance
+
+1. Open `teacher-dashboard.html?adminPassword=admin`.
+2. Set `Picture Source` to `Upload posterizer specs`.
+3. Enter a custom picture title.
+4. Upload a `Post-It_*_composite.js` file.
+5. Click `Analyze Custom Picture`.
+6. Confirm the page reports that the custom picture is ready and shows a preview.
+7. Enter teacher name, date/time, and expiration.
+8. Click `Create Instance`.
+9. Confirm the dashboard shows a spec zip download link and generated student/replay/admin URLs.
+10. Open the student URL and confirm the custom title and tile selector appear.
+
+## Teacher Creates An Image-First Custom Instance
+
+1. Open `teacher-dashboard.html?adminPassword=admin`.
+2. Set `Picture Source` to `Upload GIF/image`.
+3. Upload a GIF or other image.
+4. Confirm the dimension menu labels the closest prior dimension with `(closest)`.
+5. Choose a dimension preset or enter custom width/height.
+6. Leave the palette empty to auto-extract colors, or enter one RGB color per line.
+7. Click `Remap Palette`.
+8. Confirm the custom picture is ready and the preview appears.
+9. Create the instance.
+10. Open the replay URL and click `Auto Finish`; confirm the generated image fills in.
+
+## Incomplete Custom Spec Handling
+
+1. Open `teacher-dashboard.html?adminPassword=admin`.
+2. Set `Picture Source` to `Upload posterizer specs`.
+3. Upload only a ColorMap file.
+4. Click `Analyze Custom Picture`.
+5. Confirm the dashboard explains that complete spec data is missing.
+6. Click `Create Instance`.
+7. Confirm instance creation is blocked until a complete composite JS or CSV plus ColorMap is provided.
+
 ## Student Joins And Gets A Tile
 
 1. Open the generated student URL.

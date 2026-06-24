@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const path = require("node:path");
 
 async function createInstance(request, teacherName = "Browser Test") {
   const response = await request.post("http://127.0.0.1:8000/instance/create", {
@@ -32,6 +33,65 @@ test("teacher dashboard creates an instance and renders URLs plus QR codes", asy
   await expect(page.locator("#createResult input").nth(2)).toHaveValue(/admin\.html\?instance=/);
   await expect(page.locator("#createResult img[alt='Student QR']")).toBeVisible();
   await expect(page.locator("#createResult img[alt='Teacher QR']")).toBeVisible();
+});
+
+test("teacher dashboard creates an instance from uploaded posterizer spec files", async ({ page }) => {
+  await page.goto("/teacher-dashboard.html?adminPassword=admin");
+  await page.locator("#creationMode").selectOption("spec");
+  await page.locator("#customTitle").fill("Browser Spec Custom");
+  await page.locator("#specFiles").setInputFiles(path.join(process.cwd(), "files/drawingcanvas-tetris/Post-It_tetris_composite.js"));
+  await page.getByRole("button", { name: "Analyze Custom Picture" }).click();
+  await expect(page.locator("#customPictureStatus")).toContainText("Custom picture ready");
+
+  await page.locator("#teacherName").fill("Spec Teacher");
+  await page.locator("#dateTime").fill("2026-06-23T14:00");
+  await page.locator("#expirationHours").fill("1");
+  await page.getByRole("button", { name: "Create Instance" }).click();
+  await expect(page.locator("#customPictureStatus")).toContainText("Download spec files zip");
+  await expect(page.locator("#createResult")).toContainText("Instance created");
+
+  const studentUrl = await page.locator("#createResult input").nth(0).inputValue();
+  await page.goto(studentUrl.replace("http://localhost:4000", ""));
+  await expect(page.locator("#pictureTitle")).toContainText("Browser Spec Custom");
+  await expect(page.locator("#tileSelectorCanvas")).toBeVisible();
+});
+
+test("teacher dashboard creates an image-first instance with dimension and palette remapping", async ({ page }) => {
+  await page.goto("/teacher-dashboard.html?adminPassword=admin");
+  await page.locator("#creationMode").selectOption("image");
+  await page.locator("#customTitle").fill("Browser Image Custom");
+  await page.locator("#imageFile").setInputFiles(path.join(process.cwd(), "files/drawingcanvas-tetris/tetris.gif"));
+  await expect(page.locator("#dimensionPreset")).toContainText("15x15 (closest)");
+  await page.locator("#paletteEditor").fill("255,255,255\n0,0,0\n0,255,0\n255,0,0");
+  await page.getByRole("button", { name: "Remap Palette" }).click();
+  await expect(page.locator("#customPictureStatus")).toContainText("Custom picture ready");
+  await expect(page.locator("#customPreviewCanvas")).toBeVisible();
+
+  await page.locator("#teacherName").fill("Image Teacher");
+  await page.locator("#dateTime").fill("2026-06-23T14:00");
+  await page.locator("#expirationHours").fill("1");
+  await page.getByRole("button", { name: "Create Instance" }).click();
+  await expect(page.locator("#createResult")).toContainText("Instance created");
+
+  const replayUrl = await page.locator("#createResult input").nth(1).inputValue();
+  await page.goto(replayUrl.replace("http://localhost:4000", ""));
+  await expect(page.locator("#pictureTitle")).toContainText("Browser Image Custom");
+  await expect(page.getByRole("button", { name: "Auto Finish" })).toBeVisible();
+});
+
+test("teacher dashboard blocks incomplete spec uploads with missing-data guidance", async ({ page }) => {
+  await page.goto("/teacher-dashboard.html?adminPassword=admin");
+  await page.locator("#creationMode").selectOption("spec");
+  await page.locator("#customTitle").fill("Incomplete Custom");
+  await page.locator("#specFiles").setInputFiles(path.join(process.cwd(), "files/drawingcanvas-tetris/ColorMap_tetris.txt"));
+  await page.getByRole("button", { name: "Analyze Custom Picture" }).click();
+  await expect(page.locator("#customPictureStatus")).toContainText("Missing complete spec data");
+
+  await page.locator("#teacherName").fill("Incomplete Teacher");
+  await page.locator("#dateTime").fill("2026-06-23T14:00");
+  await page.locator("#expirationHours").fill("1");
+  await page.getByRole("button", { name: "Create Instance" }).click();
+  await expect(page.locator("#createResult")).toContainText("Missing complete spec data");
 });
 
 test("student page validates an instance, auto-selects a tile, submits a wrong pixel, and marks tile amber", async ({ page, request }) => {

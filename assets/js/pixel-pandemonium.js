@@ -18,6 +18,10 @@
     replayTimer: null
   };
 
+  let priorDimensions = [];
+  let customDraft = null;
+  let currentImageDimensions = null;
+
   function parseScalar(value) {
     const trimmed = value.trim();
     if (trimmed === "true") return true;
@@ -87,6 +91,12 @@
 
   function serverUrl(path) {
     return String(state.config.server_url || "").replace(/\/$/, "") + path;
+  }
+
+  function scriptUrl(path) {
+    if (/^https?:\/\//i.test(String(path))) return path;
+    if (String(path).startsWith("/")) return serverUrl(path);
+    return path;
   }
 
   function realtimeUrl(path) {
@@ -209,13 +219,21 @@
   }
 
   async function loadPicture(pictureId) {
-    state.picture = findPicture(pictureId);
+    if (state.instance && state.instance.pictureCustom) {
+      state.picture = {
+        id: pictureId,
+        title: state.instance.pictureTitle || "Custom Picture",
+        script: state.instance.pictureSpecUrl || state.instance.pictureScript
+      };
+    } else {
+      state.picture = findPicture(pictureId);
+    }
     if (!state.picture) showFatal("No pictures are configured.");
     delete window.palette;
     delete window.pages;
     delete window.numRows;
     delete window.numCols;
-    await loadScript(state.picture.script);
+    await loadScript(scriptUrl(state.picture.script));
     state.palette = window.palette || [];
     state.pages = window.pages || [];
     state.numRows = Number(window.numRows || 0);
@@ -720,8 +738,362 @@
     return rows;
   }
 
+  function dimensionScore(width, height, option) {
+    const aspect = width / height;
+    const optionAspect = option[0] / option[1];
+    return Math.abs(Math.log(aspect / optionAspect)) + Math.abs(Math.log((width * height) / (option[0] * option[1]))) * 0.25;
+  }
+
+  async function loadPriorDimensions() {
+    const found = new Map();
+    await Promise.all((state.config.pictures || []).map(async (picture) => {
+      try {
+        const res = await fetch(picture.script + "?t=" + Date.now());
+        if (!res.ok) return;
+        const text = await res.text();
+        const rows = Number((text.match(/var\s+numRows\s*=\s*(\d+)/) || [])[1]);
+        const cols = Number((text.match(/var\s+numCols\s*=\s*(\d+)/) || [])[1]);
+        if (rows > 0 && cols > 0) found.set(`${cols * state.subcols}x${rows * state.subrows}`, [cols * state.subcols, rows * state.subrows]);
+      } catch (err) {
+        logClient("warn", "Could not read prior picture dimensions", { pictureId: picture.id, error: err.message });
+      }
+    }));
+    priorDimensions = Array.from(found.values()).sort((a, b) => (a[0] * a[1]) - (b[0] * b[1]) || a[0] - b[0]);
+    if (!priorDimensions.length) priorDimensions = [[state.subcols, state.subrows]];
+  }
+
+  function populateDimensionPresets(imageWidth, imageHeight) {
+    const select = document.getElementById("dimensionPreset");
+    if (!select) return;
+    if (!priorDimensions.length) priorDimensions = [[state.subcols, state.subrows]];
+    select.innerHTML = "";
+    let bestIndex = 0;
+    priorDimensions.forEach((dim, index) => {
+      if (imageWidth && imageHeight && dimensionScore(imageWidth, imageHeight, dim) < dimensionScore(imageWidth, imageHeight, priorDimensions[bestIndex])) bestIndex = index;
+    });
+    priorDimensions.forEach((dim, index) => {
+      const option = document.createElement("option");
+      option.value = dim.join("x");
+      option.textContent = dim.join("x") + (index === bestIndex && imageWidth ? " (closest)" : "");
+      select.appendChild(option);
+    });
+    const custom = document.createElement("option");
+    custom.value = "custom";
+    custom.textContent = "Custom";
+    select.appendChild(custom);
+    select.selectedIndex = bestIndex;
+    document.getElementById("customWidth").value = priorDimensions[bestIndex][0];
+    document.getElementById("customHeight").value = priorDimensions[bestIndex][1];
+  }
+
+  function selectedDimensions() {
+    const preset = document.getElementById("dimensionPreset").value;
+    if (preset && preset !== "custom") {
+      const parts = preset.split("x").map(Number);
+      return { width: parts[0], height: parts[1] };
+    }
+    return {
+      width: Number(document.getElementById("customWidth").value),
+      height: Number(document.getElementById("customHeight").value)
+    };
+  }
+
+  function parsePaletteText(text) {
+    return String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+      const parts = line.replace(/[#[\]]/g, "").split(/[,\s]+/).filter(Boolean).map(Number);
+      if (parts.length !== 3 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) throw new Error("Palette lines must be RGB values like 255,255,255");
+      return parts;
+    });
+  }
+
+  function paletteToText(palette) {
+    return palette.map((rgb) => rgb.join(",")).join("\n");
+  }
+
+  function nearestPaletteIndex(rgb, palette) {
+    let best = 0;
+    let bestDistance = Infinity;
+    palette.forEach((color, index) => {
+      const d = Math.pow(rgb[0] - color[0], 2) + Math.pow(rgb[1] - color[1], 2) + Math.pow(rgb[2] - color[2], 2);
+      if (d < bestDistance) {
+        best = index;
+        bestDistance = d;
+      }
+    });
+    return best;
+  }
+
+  function autoPaletteFromPixels(pixels, maxColors) {
+    const counts = new Map();
+    for (let i = 0; i < pixels.length; i += 4) {
+      const key = [pixels[i], pixels[i + 1], pixels[i + 2]].join(",");
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, maxColors)
+      .map(([key]) => key.split(",").map(Number));
+  }
+
+  function compressPixels(pixels) {
+    const compressed = [];
+    let prev = pixels[0];
+    let count = 1;
+    for (let i = 1; i < pixels.length; i++) {
+      if (pixels[i] === prev) count++;
+      else {
+        compressed.push(count, prev);
+        prev = pixels[i];
+        count = 1;
+      }
+    }
+    compressed.push(count, prev);
+    return compressed;
+  }
+
+  function specFromIndexedPixels(indexes, width, height, palette) {
+    const paddedWidth = Math.ceil(width / state.subcols) * state.subcols;
+    const paddedHeight = Math.ceil(height / state.subrows) * state.subrows;
+    let whiteIndex = palette.findIndex((rgb) => rgb[0] === 255 && rgb[1] === 255 && rgb[2] === 255);
+    if (whiteIndex < 0) {
+      palette = palette.concat([[255, 255, 255]]);
+      whiteIndex = palette.length - 1;
+    }
+    const padded = [];
+    for (let y = 0; y < paddedHeight; y++) {
+      for (let x = 0; x < paddedWidth; x++) {
+        padded[y * paddedWidth + x] = x < width && y < height ? indexes[y * width + x] : whiteIndex;
+      }
+    }
+    const numRows = paddedHeight / state.subrows;
+    const numCols = paddedWidth / state.subcols;
+    const pages = [];
+    for (let col = 0; col < numCols; col++) {
+      for (let row = 0; row < numRows; row++) {
+        const uncompressed = [];
+        for (let y = row * state.subrows; y < (row + 1) * state.subrows; y++) {
+          for (let x = col * state.subcols; x < (col + 1) * state.subcols; x++) {
+            uncompressed.push(padded[y * paddedWidth + x]);
+          }
+        }
+        pages.push({
+          col: String.fromCharCode("A".charCodeAt(0) + col),
+          row: String(row + 1),
+          uncompressed,
+          compressed: compressPixels(uncompressed)
+        });
+      }
+    }
+    return { palette, numRows, numCols, pages };
+  }
+
+  function drawSpecPreview(spec) {
+    const canvas = document.getElementById("customPreviewCanvas");
+    if (!canvas || !spec) return;
+    const width = spec.numCols * state.subcols;
+    const height = spec.numRows * state.subrows;
+    const scale = Math.max(1, Math.floor(Math.min(300 / width, 180 / height)));
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+    canvas.style.display = "block";
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    spec.pages.forEach((page) => {
+      const col = page.col.charCodeAt(0) - "A".charCodeAt(0);
+      const row = Number(page.row) - 1;
+      page.uncompressed.forEach((pixel, index) => {
+        const localX = index % state.subcols;
+        const localY = Math.floor(index / state.subcols);
+        const rgb = spec.palette[pixel] || [255, 255, 255];
+        ctx.fillStyle = rgbToHex(rgb[0], rgb[1], rgb[2]);
+        ctx.fillRect((col * state.subcols + localX) * scale, (row * state.subrows + localY) * scale, scale, scale);
+      });
+    });
+  }
+
+  function parseJsArrayAssignment(text, name, nextName) {
+    const startMarker = "var " + name + " =";
+    const start = text.indexOf(startMarker);
+    if (start < 0) throw new Error("Missing var " + name);
+    const valueStart = start + startMarker.length;
+    const next = nextName ? text.indexOf("var " + nextName, valueStart) : -1;
+    const raw = (next >= 0 ? text.slice(valueStart, next) : text.slice(valueStart)).trim().replace(/;\s*$/, "");
+    return JSON.parse(raw);
+  }
+
+  function parseCompositeJs(text) {
+    const palette = parseJsArrayAssignment(text, "palette", "numRows");
+    const numRows = Number((text.match(/var\s+numRows\s*=\s*(\d+)/) || [])[1]);
+    const numCols = Number((text.match(/var\s+numCols\s*=\s*(\d+)/) || [])[1]);
+    const pages = parseJsArrayAssignment(text, "pages", null);
+    return { palette, numRows, numCols, pages };
+  }
+
+  function parseCompositeCsv(text, palette) {
+    if (!palette || !palette.length) throw new Error("Composite CSV requires a color map or palette");
+    const lines = String(text).trim().split(/\r?\n/).slice(1).filter(Boolean);
+    const pages = lines.map((line) => {
+      const cells = line.split(",");
+      const uncompressed = cells.slice(2, 17).map(Number);
+      const compressed = cells.slice(17).filter((item) => item !== "").map(Number);
+      return { col: cells[0].trim(), row: cells[1].trim(), uncompressed, compressed };
+    });
+    const cols = new Set(pages.map((page) => page.col)).size;
+    const rows = Math.max(...pages.map((page) => Number(page.row)));
+    return { palette, numRows: rows, numCols: cols, pages };
+  }
+
+  function parseColorMap(text) {
+    const colors = [];
+    String(text).split(/\r?\n/).forEach((line) => {
+      const match = line.match(/^\s*\d+\s*:\s*(\d+)\s+(\d+)\s+(\d+)/);
+      if (match) colors.push([Number(match[1]), Number(match[2]), Number(match[3])]);
+    });
+    return colors;
+  }
+
+  function validateClientSpec(spec) {
+    if (!spec || !Array.isArray(spec.palette) || !spec.palette.length) throw new Error("A palette is required");
+    if (!Number.isInteger(Number(spec.numRows)) || !Number.isInteger(Number(spec.numCols))) throw new Error("Dimensions are required");
+    if (!Array.isArray(spec.pages) || spec.pages.length !== Number(spec.numRows) * Number(spec.numCols)) throw new Error("Page data is incomplete");
+    spec.pages.forEach((page) => {
+      if (!Array.isArray(page.uncompressed) || page.uncompressed.length !== state.subrows * state.subcols) throw new Error("Each page needs 15 pixels");
+      if (!Array.isArray(page.compressed) || !page.compressed.length) page.compressed = compressPixels(page.uncompressed);
+    });
+    return spec;
+  }
+
+  function specToJs(spec) {
+    return "var palette = " + JSON.stringify(spec.palette, null, 2) + ";\n" +
+      "var numRows = " + spec.numRows + " ;\n" +
+      "var numCols = " + spec.numCols + " ;\n" +
+      "var pages = " + JSON.stringify(spec.pages, null, 2) + ";\n";
+  }
+
+  function generateClientArtifacts(title, spec) {
+    const base = String(title || "custom").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "custom";
+    const header = ["PageRow", "PageColumn"];
+    for (let i = 1; i <= 15; i++) header.push("pixel" + i);
+    for (let i = 1; i <= 15; i++) header.push("count" + i, "color" + i);
+    const csv = [header.join(",")].concat(spec.pages.map((page) => {
+      const compressed = page.compressed.slice();
+      while (compressed.length < 30) compressed.push("");
+      return [page.col, page.row].concat(page.uncompressed, compressed).join(",");
+    })).join("\n") + "\n";
+    const colorMap = spec.palette.map((rgb, i) => i + ": " + rgb.join(" ")).join("\n") + "\n";
+    const files = {};
+    files["Post-It_" + base + "_composite.js"] = specToJs(spec);
+    files["Post-It_" + base + "_composite.csv"] = csv;
+    files["Post-It_" + base + "_uncompressed.txt"] = spec.pages.map((page) => page.col + "\t" + page.row + "\t" + page.uncompressed.join("\t")).join("\n") + "\n";
+    files["Post-It_" + base + "_compressed.txt"] = spec.pages.map((page) => page.col + "\t" + page.row + "\t" + page.compressed.join("\t")).join("\n") + "\n";
+    files["ColorMap_" + base + ".txt"] = colorMap;
+    files["ColorMap_" + base + ".html"] = "<!doctype html><html><body><h1>" + title + "</h1><pre>" + colorMap + "</pre></body></html>\n";
+    return files;
+  }
+
+  function readFileText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  }
+
+  function readImage(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function analyzeSpecFiles() {
+    const files = Array.from(document.getElementById("specFiles").files || []);
+    if (!files.length) throw new Error("Choose at least one posterizer file");
+    let palette = null;
+    let csv = null;
+    for (const file of files) {
+      const text = await readFileText(file);
+      if (/composite\.js$/i.test(file.name)) return validateClientSpec(parseCompositeJs(text));
+      if (/composite\.csv$/i.test(file.name)) csv = text;
+      if (/colormap_.*\.(txt|html)$/i.test(file.name)) palette = parseColorMap(text);
+    }
+    if (csv) return validateClientSpec(parseCompositeCsv(csv, palette));
+    throw new Error("Missing complete spec data. Add a composite JS file, or composite CSV plus ColorMap.");
+  }
+
+  async function analyzeImageFile() {
+    const file = document.getElementById("imageFile").files[0];
+    if (!file) throw new Error("Choose a GIF or image");
+    const img = await readImage(file);
+    populateDimensionPresets(img.naturalWidth, img.naturalHeight);
+    const dims = selectedDimensions();
+    if (!dims.width || !dims.height) throw new Error("Choose output dimensions");
+    const canvas = document.createElement("canvas");
+    canvas.width = dims.width;
+    canvas.height = dims.height;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(img, 0, 0, dims.width, dims.height);
+    const imageData = ctx.getImageData(0, 0, dims.width, dims.height);
+    let palette = parsePaletteText(document.getElementById("paletteEditor").value);
+    if (!palette.length) {
+      palette = autoPaletteFromPixels(imageData.data, 12);
+      document.getElementById("paletteEditor").value = paletteToText(palette);
+    }
+    const indexes = [];
+    for (let i = 0; i < imageData.data.length; i += 4) {
+      indexes.push(nearestPaletteIndex([imageData.data[i], imageData.data[i + 1], imageData.data[i + 2]], palette));
+    }
+    return validateClientSpec(specFromIndexedPixels(indexes, dims.width, dims.height, palette));
+  }
+
+  async function analyzeCustomPicture() {
+    const mode = document.getElementById("creationMode").value;
+    if (mode === "static") return null;
+    const title = document.getElementById("customTitle").value || "Custom Picture";
+    const spec = mode === "spec" ? await analyzeSpecFiles() : await analyzeImageFile();
+    const artifacts = generateClientArtifacts(title, spec);
+    customDraft = { title, spec, artifacts };
+    drawSpecPreview(spec);
+    setHtml("customPictureStatus", '<p class="ok">Custom picture ready: ' + spec.numCols + " columns by " + spec.numRows + " rows.</p>");
+    return customDraft;
+  }
+
+  async function ensureCustomPicture() {
+    const mode = document.getElementById("creationMode").value;
+    if (mode === "static") return document.getElementById("pictureId").value;
+    if (!customDraft) await analyzeCustomPicture();
+    const res = await fetch(serverUrl("/pictures/custom"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...customDraft, adminPassword: adminPassword() })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Custom picture upload failed");
+    setHtml("customPictureStatus", '<p class="ok">Custom picture uploaded. <a href="' + serverUrl(data.zipUrl) + '">Download spec files zip</a></p>');
+    return data.id;
+  }
+
   async function initDashboard() {
     await loadConfig();
+    priorDimensions = [[state.subcols, state.subrows]];
+    populateDimensionPresets();
+    loadPriorDimensions().then(() => {
+      populateDimensionPresets(
+        currentImageDimensions && currentImageDimensions.width,
+        currentImageDimensions && currentImageDimensions.height
+      );
+    }).catch((err) => {
+      logClient("warn", "Could not load prior dimensions", { error: err.message });
+    });
     const pictureSelect = document.getElementById("pictureId");
     state.config.pictures.forEach((pic) => {
       const option = document.createElement("option");
@@ -738,25 +1110,103 @@
       document.getElementById("resetAdminCode").value = params.get("admin") || "";
     }
 
+    function syncMode() {
+      const mode = document.getElementById("creationMode").value;
+      const isStatic = mode === "static";
+      document.getElementById("pictureId").disabled = !isStatic;
+      document.getElementById("customTitle").disabled = isStatic;
+      document.getElementById("specFiles").disabled = mode !== "spec";
+      document.getElementById("imageFile").disabled = mode !== "image";
+      document.getElementById("dimensionPreset").disabled = mode !== "image";
+      document.getElementById("customWidth").disabled = mode !== "image";
+      document.getElementById("customHeight").disabled = mode !== "image";
+      document.getElementById("paletteEditor").disabled = isStatic;
+      document.getElementById("analyzeCustomButton").disabled = isStatic;
+      document.getElementById("remapPaletteButton").disabled = mode !== "image";
+      if (isStatic) {
+        customDraft = null;
+        setHtml("customPictureStatus", "");
+        const preview = document.getElementById("customPreviewCanvas");
+        if (preview) preview.style.display = "none";
+      }
+    }
+
+    document.getElementById("creationMode").addEventListener("change", syncMode);
+    document.getElementById("dimensionPreset").addEventListener("change", () => {
+      const dims = selectedDimensions();
+      if (dims.width && dims.height) {
+        document.getElementById("customWidth").value = dims.width;
+        document.getElementById("customHeight").value = dims.height;
+      }
+      customDraft = null;
+    });
+    document.getElementById("customWidth").addEventListener("input", () => {
+      document.getElementById("dimensionPreset").value = "custom";
+      customDraft = null;
+    });
+    document.getElementById("customHeight").addEventListener("input", () => {
+      document.getElementById("dimensionPreset").value = "custom";
+      customDraft = null;
+    });
+    async function handleImageFileChange() {
+      customDraft = null;
+      const file = document.getElementById("imageFile").files[0];
+      if (!file) return;
+      try {
+        const img = await readImage(file);
+        currentImageDimensions = { width: img.naturalWidth, height: img.naturalHeight };
+        if (priorDimensions.length <= 1) await loadPriorDimensions();
+        populateDimensionPresets(img.naturalWidth, img.naturalHeight);
+        setHtml("customPictureStatus", '<p>Image loaded. Review dimensions and palette, then analyze.</p>');
+      } catch (err) {
+        setHtml("customPictureStatus", '<p class="error">' + err.message + "</p>");
+      }
+    }
+    document.getElementById("imageFile").addEventListener("change", handleImageFileChange);
+    document.getElementById("specFiles").addEventListener("change", () => { customDraft = null; });
+    document.getElementById("paletteEditor").addEventListener("input", () => { customDraft = null; });
+    document.getElementById("analyzeCustomButton").addEventListener("click", async () => {
+      try {
+        await analyzeCustomPicture();
+      } catch (err) {
+        setHtml("customPictureStatus", '<p class="error">' + err.message + "</p>");
+      }
+    });
+    document.getElementById("remapPaletteButton").addEventListener("click", async () => {
+      try {
+        customDraft = null;
+        await analyzeCustomPicture();
+      } catch (err) {
+        setHtml("customPictureStatus", '<p class="error">' + err.message + "</p>");
+      }
+    });
+    syncMode();
+    if (document.getElementById("imageFile").files.length) handleImageFileChange();
+
     document.getElementById("createForm").addEventListener("submit", async (event) => {
       event.preventDefault();
-      const body = {
-        pictureId: pictureSelect.value,
-        teacherName: document.getElementById("teacherName").value,
-        dateTime: document.getElementById("dateTime").value,
-        expirationHours: Number(document.getElementById("expirationHours").value)
-      };
-      const res = await fetch(serverUrl("/instance/create"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setHtml("createResult", '<p class="error">' + (data.error || "Create failed") + "</p>");
-        return;
+      try {
+        const pictureId = await ensureCustomPicture();
+        const body = {
+          pictureId,
+          teacherName: document.getElementById("teacherName").value,
+          dateTime: document.getElementById("dateTime").value,
+          expirationHours: Number(document.getElementById("expirationHours").value)
+        };
+        const res = await fetch(serverUrl("/instance/create"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setHtml("createResult", '<p class="error">' + (data.error || "Create failed") + "</p>");
+          return;
+        }
+        renderCreatedInstance(data);
+      } catch (err) {
+        setHtml("createResult", '<p class="error">' + err.message + "</p>");
       }
-      renderCreatedInstance(data);
     });
 
     document.getElementById("resetForm").addEventListener("submit", async (event) => {

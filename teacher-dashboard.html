@@ -30,8 +30,33 @@
       <h2>Create an Instance</h2>
       <form id="createForm">
         <div class="form-grid">
+          <label for="creationMode">Picture Source</label>
+          <select id="creationMode">
+            <option value="static">Configured picture</option>
+            <option value="spec">Upload posterizer specs</option>
+            <option value="image">Upload GIF/image</option>
+          </select>
           <label for="pictureId">Picture</label>
           <select id="pictureId" required></select>
+          <label for="customTitle">Custom Picture Title</label>
+          <input id="customTitle" placeholder="My custom poster">
+          <label for="specFiles">Posterizer Files</label>
+          <input id="specFiles" type="file" multiple accept=".js,.csv,.txt,.html">
+          <label for="imageFile">GIF/Image</label>
+          <input id="imageFile" type="file" accept="image/gif,image/png,image/jpeg,image/webp">
+          <label for="dimensionPreset">Output Dimensions</label>
+          <select id="dimensionPreset"></select>
+          <label for="customWidth">Custom Width</label>
+          <input id="customWidth" type="number" min="1" step="1">
+          <label for="customHeight">Custom Height</label>
+          <input id="customHeight" type="number" min="1" step="1">
+          <label for="paletteEditor">Palette</label>
+          <textarea id="paletteEditor" rows="4" placeholder="One RGB color per line, for example: 255,255,255"></textarea>
+          <span></span>
+          <p>
+            <button type="button" id="analyzeCustomButton">Analyze Custom Picture</button>
+            <button type="button" id="remapPaletteButton">Remap Palette</button>
+          </p>
           <label for="teacherName">Teacher Name</label>
           <input id="teacherName" required>
           <label for="dateTime">Date/Time</label>
@@ -41,6 +66,8 @@
         </div>
         <p><button type="submit">Create Instance</button></p>
       </form>
+      <div id="customPictureStatus"></div>
+      <canvas id="customPreviewCanvas" width="300" height="180" style="display:none; border:1px solid #999;"></canvas>
       <div id="createResult"></div>
     </div>
 
