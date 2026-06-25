@@ -477,6 +477,13 @@
     return "/faye/messages/" + state.instance.instanceCode;
   }
 
+  // The class access key authorizes the realtime channel for this instance, the
+  // same way it authorizes the HTTP status/insert/retrieve routes. The public
+  // Tetris demo has an empty key and is exempt on the server.
+  function realtimeKey() {
+    return (state.instance && state.instance.accessKey) || "";
+  }
+
   function publishRealtime(message) {
     if (state.fayeClient) {
       state.fayeClient.publish(fayeChannel(), { text: message });
@@ -490,10 +497,11 @@
       state.fayeClient = new window.Faye.Client(realtimeUrl("/faye"));
       state.fayeClient.addExtension({
         outgoing: function (message, callback) {
+          message.ext = message.ext || {};
           if (message.channel === "/meta/handshake") {
-            message.ext = message.ext || {};
             message.ext.origin = window.location.origin;
           }
+          message.ext.key = realtimeKey();
           callback(message);
         }
       });
@@ -504,7 +512,7 @@
     }
 
     const wsBase = realtimeUrl("/faye").replace(/^http/, "ws");
-    state.ws = new WebSocket(wsBase + "?channel=" + encodeURIComponent(fayeChannel()));
+    state.ws = new WebSocket(wsBase + "?channel=" + encodeURIComponent(fayeChannel()) + "&key=" + encodeURIComponent(realtimeKey()));
     state.ws.onmessage = function (event) {
       const parsed = JSON.parse(event.data);
       const text = parsed.data && parsed.data.text ? parsed.data.text : parsed.text;
