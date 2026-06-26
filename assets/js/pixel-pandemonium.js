@@ -129,6 +129,38 @@
     if (el) el.innerHTML = html;
   }
 
+  // Lightweight, self-contained toast. Builds its own fixed-position container
+  // and styling so it works on any page that loads this script without needing
+  // extra HTML/CSS. Pass { type: "success" } for a green toast; default is an
+  // error (red) toast. Auto-dismisses after durationMs (default 4s).
+  function showToast(message, opts) {
+    if (typeof document === "undefined" || !document.body) return;
+    let holder = document.getElementById("toastHolder");
+    if (!holder) {
+      holder = document.createElement("div");
+      holder.id = "toastHolder";
+      holder.style.cssText =
+        "position:fixed;top:1rem;right:1rem;z-index:9999;display:flex;" +
+        "flex-direction:column;gap:0.5rem;max-width:min(90vw,360px);";
+      document.body.appendChild(holder);
+    }
+    const isError = !opts || opts.type !== "success";
+    const toast = document.createElement("div");
+    toast.setAttribute("role", "alert");
+    toast.style.cssText =
+      "padding:0.6rem 0.9rem;border-radius:6px;color:#fff;font-size:0.95rem;" +
+      "line-height:1.3;box-shadow:0 2px 8px rgba(0,0,0,0.25);opacity:0;" +
+      "transition:opacity 0.15s ease;background:" + (isError ? "#b00020" : "#2e7d32") + ";";
+    toast.textContent = message;
+    holder.appendChild(toast);
+    requestAnimationFrame(() => { toast.style.opacity = "1"; });
+    const ttl = (opts && opts.durationMs) || 4000;
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
+    }, ttl);
+  }
+
   function showFatal(message) {
     document.body.innerHTML = '<div class="page-wrap"><h2 class="error">' + message + "</h2></div>";
     throw new Error(message);
@@ -481,6 +513,8 @@
     });
     if (!res.ok) {
       const responseText = await res.text().catch(() => "");
+      let serverError = "";
+      try { serverError = (JSON.parse(responseText) || {}).error || ""; } catch (e) { /* non-JSON body */ }
       logClient("error", "Replay insert failed", {
         url,
         status: res.status,
@@ -489,7 +523,10 @@
         instanceCode: state.instance && state.instance.instanceCode,
         message
       });
-      throw new Error("Replay insert failed with HTTP " + res.status);
+      const err = new Error("Replay insert failed with HTTP " + res.status);
+      err.status = res.status;
+      err.serverError = serverError;
+      throw err;
     }
     return res;
   }
@@ -751,6 +788,10 @@
       const fullCellW = canvas.width / state.subcols;
       const fullCellH = canvas.height / state.subrows;
       const message = [xSquare * fullCellW, ySquare * fullCellH, fullCellW, fullCellH, color, xSquare, ySquare].join(",");
+      // Optimistically draw the tile, but remember what was there so we can undo
+      // it if the server rejects the submission (e.g. a 400 for the wrong color
+      // on the public Tetris demo, which only accepts correct pixels).
+      const previousCell = state.filled[ySquare][xSquare];
       drawGridSquare(canvas, color, pageX, pageY, true);
       applyMessage(message);
       try {
@@ -762,11 +803,20 @@
       } catch (err) {
         logClient("error", "Student canvas click failed", {
           error: err.message,
+          status: err.status,
+          serverError: err.serverError,
           stack: err.stack,
           selectedTile: state.selectedTile,
           message
         });
-        setText("tileStatusText", "Save failed. Please click that pixel again.");
+        // Roll back the optimistic draw: the server did not accept this pixel.
+        state.filled[ySquare][xSquare] = previousCell;
+        if (state.selectedTile) selectTile(state.selectedTile.row, state.selectedTile.col);
+        // Surface the actual reason so the student can correct it and retry.
+        const reason = (err && err.serverError) ? err.serverError : "Save failed.";
+        const fullMessage = reason + " Please click that pixel again.";
+        setText("tileStatusText", fullMessage);
+        showToast(fullMessage);
       }
     });
   }
