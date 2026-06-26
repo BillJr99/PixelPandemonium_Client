@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# The client tests (smoke + Playwright browser E2E) run against a LOCAL sibling
+# server — not a deployed one — so they exercise the code in this push/PR. The
+# server repo is checked out beside the client to match the `../PixelPandemonium_Server`
+# layout the test scripts expect. Tests that would require a real Cloudflare
+# deployment are not part of this suite.
+jobs:
+  e2e:
+    name: Smoke + browser E2E
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout client
+        uses: actions/checkout@v4
+        with:
+          path: PixelPandemonium_Client
+
+      - name: Checkout server (local test stack)
+        uses: actions/checkout@v4
+        with:
+          repository: BillJr99/PixelPandemonium_Server
+          ref: main
+          path: PixelPandemonium_Server
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: PixelPandemonium_Client
+
+      - name: Install server dependencies
+        working-directory: PixelPandemonium_Server
+        run: npm install
+
+      - name: Write server .env for the local stack
+        working-directory: PixelPandemonium_Server
+        run: |
+          cat > .env <<'EOF'
+          ADMIN_PASSWORD=admin
+          DEFAULT_TEACHER_KEY=teacher
+          DOWNLOAD_TOKEN=change-me-before-deploying
+          AUTH_FAILURE_LIMIT=5
+          AUTH_FAILURE_WINDOW_MINUTES=10
+          AUTH_ADMIN_BAN_DAYS=1
+          AUTH_TEACHER_BAN_MINUTES=10
+          AUTH_STUDENT_BAN_MINUTES=10
+          RATE_LIMIT_MAX_PER_SECOND=1000
+          RATE_LIMIT_MAX_PER_MINUTE=1000
+          RATE_LIMIT_MAX_PER_DAY=100000
+          EOF
+
+      - name: Point client at the local server (CI only)
+        working-directory: PixelPandemonium_Client
+        run: |
+          sed -i 's#^server_url:.*#server_url: http://localhost:8000#' config.yaml
+          sed -i 's#^realtime_url:.*#realtime_url: http://localhost:8000#' config.yaml
+
+      - name: Install client dependencies
+        working-directory: PixelPandemonium_Client
+        run: npm install
+
+      - name: Install Playwright browser
+        working-directory: PixelPandemonium_Client
+        run: npx playwright install --with-deps chromium
+
+      - name: Run client smoke + browser tests
+        working-directory: PixelPandemonium_Client
+        run: npm run test:all

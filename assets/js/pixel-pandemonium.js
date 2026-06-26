@@ -85,6 +85,21 @@
     return state.config;
   }
 
+  // The picture catalog now lives entirely on the server (predefined + custom).
+  // Fetch it for the create/admin/index menus. Call after loadConfig so server_url
+  // is known. Tolerant of failure so a page still loads with an empty menu.
+  async function loadPictures() {
+    try {
+      const res = await fetch(serverUrl("/pictures"));
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      state.pictures = await res.json();
+    } catch (err) {
+      logClient("warn", "Could not load picture catalog from server", { error: err.message });
+      state.pictures = state.pictures || [];
+    }
+    return state.pictures;
+  }
+
   function absoluteUrl(path) {
     const base = String(state.config.base_url || window.location.origin).replace(/\/$/, "");
     return base + "/" + path.replace(/^\//, "");
@@ -240,7 +255,11 @@
     const keyQuery = key ? "?key=" + encodeURIComponent(key) : "";
     const res = await fetch(serverUrl("/instance/" + encodeURIComponent(code) + "/status" + keyQuery));
     const data = await res.json();
-    if (res.status === 403 && !retried) {
+    // Only re-prompt for a key when the server actually rejected the access key.
+    // The public tetris demo never needs a key, and other 403s (e.g. an origin/CORS
+    // rejection, "Forbidden: Invalid origin") must not masquerade as a key prompt.
+    const isAccessKeyError = res.status === 403 && /access key/i.test((data && data.error) || "");
+    if (isAccessKeyError && !isTetrisDemoCode(code) && !retried) {
       repromptUrlKey("key", "That class access key was not accepted. Enter the class access key:");
       return validateInstance(true);
     }
@@ -281,8 +300,8 @@
     return state.instance;
   }
 
-  function findPicture(id) {
-    return (state.config.pictures || []).find((pic) => pic.id === id) || state.config.pictures[0];
+  function pictureFromMenu(id) {
+    return (state.pictures || []).find((pic) => pic.id === id) || null;
   }
 
   function loadScript(src) {
@@ -296,16 +315,18 @@
   }
 
   async function loadPicture(pictureId) {
-    if (state.instance && state.instance.pictureCustom) {
-      state.picture = {
-        id: pictureId,
-        title: state.instance.pictureTitle || "Custom Picture",
-        script: state.instance.pictureSpecUrl || state.instance.pictureScript
-      };
-    } else {
-      state.picture = findPicture(pictureId);
-    }
-    if (!state.picture) showFatal("No pictures are configured.");
+    // Every picture (predefined and custom) is served from the server spec.js
+    // endpoint. Prefer the server-provided URL/title from the loaded instance;
+    // otherwise fall back to the menu entry (index browse) or build the URL from id.
+    const fromMenu = pictureFromMenu(pictureId);
+    const script = (state.instance && (state.instance.pictureSpecUrl || state.instance.pictureScript))
+      || (fromMenu && fromMenu.script)
+      || ("/pictures/" + encodeURIComponent(pictureId) + "/spec.js");
+    const title = (state.instance && state.instance.pictureTitle)
+      || (fromMenu && fromMenu.title)
+      || pictureId;
+    state.picture = { id: pictureId, title, script };
+    if (!pictureId) showFatal("No picture is configured for this instance.");
     window.palette = undefined;
     window.pages = undefined;
     window.numRows = undefined;
@@ -881,19 +902,15 @@
   }
 
   async function loadPriorDimensions() {
+    // Derive the dimension presets from the server picture catalog (which now
+    // includes numRows/numCols per picture) instead of fetching each script.
+    if (!state.pictures) await loadPictures();
     const found = new Map();
-    await Promise.all((state.config.pictures || []).map(async (picture) => {
-      try {
-        const res = await fetch(picture.script + "?t=" + Date.now());
-        if (!res.ok) return;
-        const text = await res.text();
-        const rows = Number((text.match(/var\s+numRows\s*=\s*(\d+)/) || [])[1]);
-        const cols = Number((text.match(/var\s+numCols\s*=\s*(\d+)/) || [])[1]);
-        if (rows > 0 && cols > 0) found.set(`${cols * state.subcols}x${rows * state.subrows}`, [cols * state.subcols, rows * state.subrows]);
-      } catch (err) {
-        logClient("warn", "Could not read prior picture dimensions", { pictureId: picture.id, error: err.message });
-      }
-    }));
+    (state.pictures || []).forEach((picture) => {
+      const rows = Number(picture.numRows);
+      const cols = Number(picture.numCols);
+      if (rows > 0 && cols > 0) found.set(`${cols * state.subcols}x${rows * state.subrows}`, [cols * state.subcols, rows * state.subrows]);
+    });
     priorDimensions = Array.from(found.values()).sort((a, b) => (a[0] * a[1]) - (b[0] * b[1]) || a[0] - b[0]);
     if (!priorDimensions.length) priorDimensions = [[state.subcols, state.subrows]];
   }
@@ -1275,6 +1292,7 @@
 
   async function initDashboard() {
     await loadConfig();
+    await loadPictures();
     await ensureTeacherAccess();
     const createContent = document.getElementById("teacherCreateContent");
     if (createContent) createContent.style.display = "block";
@@ -1289,7 +1307,7 @@
       logClient("warn", "Could not load prior dimensions", { error: err.message });
     });
     const pictureSelect = document.getElementById("pictureId");
-    state.config.pictures.forEach((pic) => {
+    (state.pictures || []).forEach((pic) => {
       const option = document.createElement("option");
       option.value = pic.id;
       option.textContent = pic.title;
@@ -1658,7 +1676,7 @@
   function populateAdminCreateForm() {
     const pictureSelect = document.getElementById("adminPictureId");
     if (!pictureSelect || pictureSelect.options.length) return;
-    state.config.pictures.forEach((pic) => {
+    (state.pictures || []).forEach((pic) => {
       const option = document.createElement("option");
       option.value = pic.id;
       option.textContent = pic.title;
@@ -1846,6 +1864,7 @@
 
   async function initAdmin() {
     await loadConfig();
+    await loadPictures();
     instanceListMode = "admin";
     populateAdminCreateForm();
     attachInstanceListHandlers();
@@ -2060,8 +2079,9 @@
 
   async function initIndex() {
     await loadConfig();
+    await loadPictures();
     const selector = document.getElementById("pageSelector");
-    state.config.pictures.forEach((pic) => {
+    (state.pictures || []).forEach((pic) => {
       const option = document.createElement("option");
       option.value = pic.id;
       option.textContent = pic.title;

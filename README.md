@@ -87,10 +87,12 @@ Edit `config.yaml`.
 - `subcols` and `subrows`: per-tile pixel grid dimensions.
 - `student_canvas_width` and `student_canvas_height`: student tile canvas size.
 - `replay_cell_size`: rendered full-image pixel size.
-- `pictures`: enabled picture ids, display names, and composite JS file paths.
 
-The teacher dashboard also has a custom picture workflow. Custom picture specs
-are stored by the server, so they do not need entries in `config.yaml`.
+The picture catalog — both the predefined seed images and teacher-created custom
+pictures — lives entirely on the server. The client fetches it from the server's
+`/pictures` endpoint to populate the create/admin menus and loads each picture's
+content from `/pictures/<id>/spec.js`. No picture ids or picture files are stored
+in the client repository or in `config.yaml`.
 
 ## Local Run
 

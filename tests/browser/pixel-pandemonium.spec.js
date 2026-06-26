@@ -88,7 +88,7 @@ test("teacher dashboard creates an instance from uploaded posterizer spec files"
   await page.goto("/create-instance.html?teacherAccessKey=teacher");
   await page.locator("#creationMode").selectOption("spec");
   await page.locator("#customTitle").fill("Browser Spec Custom");
-  await page.locator("#specFiles").setInputFiles(path.join(process.cwd(), "files/drawingcanvas-tetris/Post-It_tetris_composite.js"));
+  await page.locator("#specFiles").setInputFiles(path.join(process.cwd(), "tests/fixtures/Post-It_tetris_composite.js"));
   await page.getByRole("button", { name: "Analyze Custom Picture" }).click();
   await expect(page.locator("#customPictureStatus")).toContainText("Custom picture ready");
 
@@ -111,7 +111,7 @@ test("teacher dashboard creates an image-first instance with dimension and palet
   await expect(await page.evaluate(() => window.PixelPandemonium.__test.fitAspectGridDimensions(576, 216, 100, 36))).toEqual({ width: 95, height: 36 });
   await page.locator("#creationMode").selectOption("image");
   await page.locator("#customTitle").fill("Browser Image Custom");
-  await page.locator("#imageFile").setInputFiles(path.join(process.cwd(), "files/drawingcanvas-tetris/tetris.gif"));
+  await page.locator("#imageFile").setInputFiles(path.join(process.cwd(), "tests/fixtures/tetris.gif"));
   await expect(page.locator("#customPictureStatus")).toContainText("Image loaded");
   await expect(page.locator("#dimensionPreset")).toContainText("15x15 (closest)");
   await page.locator("#dimensionPreset").selectOption("custom");
@@ -139,7 +139,7 @@ test("teacher dashboard blocks incomplete spec uploads with missing-data guidanc
   await page.goto("/create-instance.html?teacherAccessKey=teacher");
   await page.locator("#creationMode").selectOption("spec");
   await page.locator("#customTitle").fill("Incomplete Custom");
-  await page.locator("#specFiles").setInputFiles(path.join(process.cwd(), "files/drawingcanvas-tetris/ColorMap_tetris.txt"));
+  await page.locator("#specFiles").setInputFiles(path.join(process.cwd(), "tests/fixtures/ColorMap_tetris.txt"));
   await page.getByRole("button", { name: "Analyze Custom Picture" }).click();
   await expect(page.locator("#customPictureStatus")).toContainText("Missing complete spec data");
 
