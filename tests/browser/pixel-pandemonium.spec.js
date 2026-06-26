@@ -411,3 +411,64 @@ test("admin page rotates class and teacher keys for secured instances", async ({
   await expect(page.locator("#adminStatus")).toContainText("Reset teacher key");
   await expect(page).toHaveURL(/teacherKey=/);
 });
+
+test("public tetris demo toasts and rolls back a wrong-color pixel", async ({ page, request }) => {
+  // Start from a clean demo so the auto-selected tile is blank and deterministic.
+  const reset = await request.post("http://127.0.0.1:8000/instance/tetris/reset", {
+    headers: { Origin: "http://localhost:4000" },
+    data: {}
+  });
+  expect(reset.ok()).toBeTruthy();
+
+  await page.goto("/instructions.html?instance=tetris");
+  await expect(page.locator("#pictureTitle")).toContainText("Tetris");
+  await expect(page.locator("#tileStatusText")).toContainText("Selected:");
+
+  // Work out the square a top-left canvas click maps to, the color the demo
+  // expects there, and a different (wrong) palette swatch to submit.
+  const target = await page.evaluate(() => {
+    const t = window.PixelPandemonium.__test;
+    const s = t.state;
+    const tile = s.selectedTile;
+    const xSquare = tile.col * s.subcols; // sub-cell (0,0) of the selected tile
+    const ySquare = tile.row * s.subrows;
+    const colLetter = String.fromCharCode(65 + tile.col);
+    const pageData = s.pages.find((p) => String(p.row) === String(tile.row + 1) && p.col === colLetter);
+    const expectedHex = t.rgbToHex(
+      s.palette[pageData.uncompressed[0]][0],
+      s.palette[pageData.uncompressed[0]][1],
+      s.palette[pageData.uncompressed[0]][2]
+    ).toLowerCase();
+    let wrongIndex = -1;
+    for (let i = 0; i < s.palette.length; i++) {
+      const hex = t.rgbToHex(s.palette[i][0], s.palette[i][1], s.palette[i][2]).toLowerCase();
+      if (hex !== expectedHex) { wrongIndex = i; break; }
+    }
+    return { tile, xSquare, ySquare, expectedHex, wrongIndex, filledBefore: s.filled[ySquare][xSquare] || null };
+  });
+  expect(target.wrongIndex).toBeGreaterThanOrEqual(0);
+  expect(target.filledBefore).toBeNull();
+  expect(await page.evaluate((tile) => window.PixelPandemonium.__test.getTileStatus(tile.row, tile.col), target.tile)).toBe("blank");
+
+  // Submit the wrong color on the public demo. The server returns 400, and the
+  // client should toast the reason and undo the optimistic pixel.
+  const toast = page.locator("#toastHolder");
+  await page.locator(`#canvascolor${target.wrongIndex}`).click();
+  await page.locator("#drawCanvas").click({ position: { x: 20, y: 20 } });
+
+  // The toast carries the server's actual reason (not a generic "Save failed").
+  await expect(toast).toContainText("does not match the expected color");
+  await expect(page.locator("#tileStatusText")).toContainText("does not match the expected color");
+
+  // Rollback: the optimistic pixel is gone and the tile is blank again. (The
+  // status line is set after the rollback runs, so by now the undo has happened.)
+  const afterFilled = await page.evaluate((t) => window.PixelPandemonium.__test.state.filled[t.ySquare][t.xSquare] || null, target);
+  expect(afterFilled).toBeNull();
+  expect(await page.evaluate((tile) => window.PixelPandemonium.__test.getTileStatus(tile.row, tile.col), target.tile)).toBe("blank");
+
+  // The server stored nothing for the rejected submission.
+  const rows = await (await request.get("http://127.0.0.1:8000/instance/tetris/retrieve", {
+    headers: { Origin: "http://localhost:4000" }
+  })).json();
+  expect(rows.length).toBe(0);
+});
