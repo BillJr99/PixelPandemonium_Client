@@ -852,6 +852,13 @@
   }
 
   function adminAnimationDelay(defaultDelay) {
+    // Prefer an on-page Delay input (teacher dashboard) when present, then fall back
+    // to the ?animationDelayMs= URL param, then the caller's default.
+    const input = document.getElementById("adminAnimationDelayMs");
+    if (input) {
+      const value = Number(input.value);
+      if (Number.isFinite(value) && value >= 0) return value;
+    }
     const params = new URLSearchParams(window.location.search);
     const delay = Number(params.get("animationDelayMs"));
     return Number.isFinite(delay) && delay >= 0 ? delay : defaultDelay;
@@ -1674,7 +1681,18 @@
     document.getElementById("resetInstanceCode").value = state.instance.instanceCode;
     document.getElementById("resetAdminCode").value = state.instance.adminCode || "";
     document.getElementById("resetTeacherKey").value = state.instance.teacherKey || "";
+    updateDashboardReplayLink();
     setHtml("dashboardAdminStatus", '<p class="ok">Loaded ' + htmlEscape(state.instance.instanceName || state.instance.instanceCode) + ".</p>");
+  }
+
+  function updateDashboardReplayLink() {
+    const link = document.getElementById("dashboardReplayLink");
+    if (!link) return;
+    const row = document.getElementById("dashboardReplayLinkRow");
+    const replayUrl = (state.instance && state.instance.replayUrl) || "";
+    link.href = replayUrl || "#";
+    link.textContent = replayUrl || "";
+    if (row) row.style.display = replayUrl ? "" : "none";
   }
 
   function mergeAdminInstance(instance, adminData) {
@@ -1831,7 +1849,10 @@
   async function runAdminAnimation(finishOnly) {
     if (!state.instance) throw new Error("Load an instance first.");
     const rows = finishOnly ? (state.instance.rows || []) : await adminFetchRows();
-    const source = document.getElementById("animationSource").value;
+    // The Source select was dropped from the teacher dashboard in favor of the two
+    // buttons; when it is absent, the button (finishOnly) picks the source instead.
+    const sourceEl = document.getElementById("animationSource");
+    const source = sourceEl ? sourceEl.value : (finishOnly ? "finished" : "instance");
     const order = document.getElementById("animationOrder").value;
     if (finishOnly || source === "finished") {
       const baseRows = order === "random" ? orderedRows(rows) : rows;
