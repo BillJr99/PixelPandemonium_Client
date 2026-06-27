@@ -23,6 +23,7 @@
   <ul class="pp-nav">
     <li><a href="index.html">Pixel Pandemonium</a></li>
     <li><a href="teacher-dashboard.html">Teacher Dashboard</a></li>
+    <li><a href="admin.html">Administrator Dashboard</a></li>
   </ul>
   <div class="page-wrap" id="adminAuthStatus"></div>
   <div class="page-wrap" id="adminContent" style="display:none;">
@@ -105,6 +106,12 @@
         <button id="refreshRowsButton" type="button">Refresh Rows</button>
       </p>
       <div id="adminRows"></div>
+    </div>
+    <div class="panel">
+      <h2>Data Export</h2>
+      <p>Download a JSON export of all replay data across every instance (gated by the admin password).</p>
+      <p><button id="downloadAllButton" type="button">Download All Data (JSON)</button></p>
+      <div id="downloadStatus"></div>
     </div>
   </div>
   <script>PixelPandemonium.initAdmin();</script>

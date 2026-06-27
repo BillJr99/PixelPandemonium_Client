@@ -140,19 +140,19 @@ Create or review the server `.env`:
 ```bash
 ADMIN_PASSWORD=admin
 DEFAULT_TEACHER_KEY=teacher
-DOWNLOAD_TOKEN=change-me-before-deploying
 AUTH_FAILURE_LIMIT=5
 AUTH_FAILURE_WINDOW_MINUTES=10
 AUTH_BAN_DAYS=1
 ```
 
-- `ADMIN_PASSWORD` is required for the admin page and admin-only APIs.
+- `ADMIN_PASSWORD` is required for the admin page and admin-only APIs, including
+  the full replay-data export at `/download` (the "Download All Data" button on
+  the admin page).
 - `DEFAULT_TEACHER_KEY` is the first global teacher key seeded by the server.
   Teachers need a global teacher key to create instances or list/administer
   non-demo instances. Teachers only see and administer instances created with
   that same global teacher key. Without one, the teacher dashboard can only work
   with the public Tetris demo.
-- `DOWNLOAD_TOKEN` is used only for the protected `/download` replay-data export.
 - `AUTH_FAILURE_LIMIT`, `AUTH_FAILURE_WINDOW_MINUTES`, and `AUTH_BAN_DAYS`
   control server-side temporary IP bans after repeated bad class keys, teacher
   keys, admin codes, or admin passwords.

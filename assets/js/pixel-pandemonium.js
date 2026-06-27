@@ -1934,6 +1934,33 @@
     setHtml("adminStatus", '<p class="ok">Reset ' + label + ".</p>");
   }
 
+  async function downloadAllData() {
+    // The full export is gated on the admin password; send it as a header so it is
+    // not placed in the URL. The server streams a data-export.json attachment.
+    const res = await fetch(serverUrl("/download"), {
+      headers: { "X-Admin-Password": adminPassword() }
+    });
+    if (!res.ok) {
+      let message = "Download failed";
+      try {
+        const data = await res.json();
+        message = data.error || message;
+      } catch (err) {
+        // non-JSON error body; keep the default message
+      }
+      throw new Error(message);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "data-export.json";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function initAdmin() {
     await loadConfig();
     await loadPictures();
@@ -1986,6 +2013,18 @@
         setHtml("adminStatus", '<p class="error">' + err.message + "</p>");
       }
     });
+    const downloadButton = document.getElementById("downloadAllButton");
+    if (downloadButton) {
+      downloadButton.addEventListener("click", async () => {
+        try {
+          setHtml("downloadStatus", "<p>Preparing download…</p>");
+          await downloadAllData();
+          setHtml("downloadStatus", '<p class="ok">Download started.</p>');
+        } catch (err) {
+          setHtml("downloadStatus", '<p class="error">' + err.message + "</p>");
+        }
+      });
+    }
     const deleteButton = document.getElementById("deleteInstanceButton");
     if (deleteButton) {
       deleteButton.addEventListener("click", async () => {

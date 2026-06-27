@@ -98,6 +98,47 @@ a {
   width: 5em;
 }
 
+/* Page-specific submenu ribbon shown just below the shared main menu. Slightly
+   smaller than .pp-nav and a lighter shade so it reads as secondary. */
+.pp-subnav {
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #6A95BF;
+}
+
+.pp-subnav li {
+  float: left;
+}
+
+.pp-subnav a,
+.pp-subnav button,
+.pp-subnav select {
+  display: inline-block;
+  color: #EBEDEC;
+  text-align: center;
+  padding: 9px 14px;
+  font-family: "Old Standard TT", Arial, Helvetica, sans-serif;
+  font-weight: bold;
+  text-decoration: none;
+  background-color: #6A95BF;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.pp-subnav a:hover,
+.pp-subnav button:hover {
+  background-color: #99CC99;
+  text-decoration: none;
+}
+
+.pp-subnav .pp-nav-control {
+  padding: 5px 10px;
+  font-size: 15px;
+}
+
 .page-wrap {
   padding: 18px;
 }
