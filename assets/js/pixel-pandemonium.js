@@ -133,8 +133,11 @@
   // and styling so it works on any page that loads this script without needing
   // extra HTML/CSS. Pass { type: "success" } for a green toast; default is an
   // error (red) toast. Auto-dismisses after durationMs (default 4s).
+  // Shows a toast. opts.type: "error" (default, red), "success" (green), "info"
+  // (blue). opts.persist keeps it on screen until the returned dismiss() is called;
+  // otherwise it auto-hides after opts.durationMs (default 4000). Returns dismiss().
   function showToast(message, opts) {
-    if (typeof document === "undefined" || !document.body) return;
+    if (typeof document === "undefined" || !document.body) return function () {};
     let holder = document.getElementById("toastHolder");
     if (!holder) {
       holder = document.createElement("div");
@@ -144,21 +147,28 @@
         "flex-direction:column;gap:0.5rem;max-width:min(90vw,360px);";
       document.body.appendChild(holder);
     }
-    const isError = !opts || opts.type !== "success";
+    const type = (opts && opts.type) || "error";
+    const background = type === "success" ? "#2e7d32" : type === "info" ? "#1565c0" : "#b00020";
     const toast = document.createElement("div");
-    toast.setAttribute("role", "alert");
+    toast.setAttribute("role", type === "error" ? "alert" : "status");
     toast.style.cssText =
       "padding:0.6rem 0.9rem;border-radius:6px;color:#fff;font-size:0.95rem;" +
       "line-height:1.3;box-shadow:0 2px 8px rgba(0,0,0,0.25);opacity:0;" +
-      "transition:opacity 0.15s ease;background:" + (isError ? "#b00020" : "#2e7d32") + ";";
+      "transition:opacity 0.15s ease;background:" + background + ";";
     toast.textContent = message;
     holder.appendChild(toast);
     requestAnimationFrame(() => { toast.style.opacity = "1"; });
-    const ttl = (opts && opts.durationMs) || 4000;
-    setTimeout(() => {
+    let dismissed = false;
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
       toast.style.opacity = "0";
       setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
-    }, ttl);
+    }
+    if (!opts || !opts.persist) {
+      setTimeout(dismiss, (opts && opts.durationMs) || 4000);
+    }
+    return dismiss;
   }
 
   function showFatal(message) {
@@ -1962,18 +1972,22 @@
   }
 
   async function initAdmin() {
-    await loadConfig();
-    await loadPictures();
-    instanceListMode = "admin";
-    populateAdminCreateForm();
-    attachInstanceListHandlers();
-    attachAdminCreateHandler();
-    attachTeacherKeyHandlers();
+    // Render the page shell immediately so the admin isn't staring at a blank page
+    // while config, pictures, and instances load; a toast signals work in progress
+    // and is dismissed once the data is in.
+    showAdminContent();
+    const dismissLoading = showToast("Loading the admin dashboard…", { type: "info", persist: true });
     try {
+      await loadConfig();
+      await loadPictures();
+      instanceListMode = "admin";
+      populateAdminCreateForm();
+      attachInstanceListHandlers();
+      attachAdminCreateHandler();
+      attachTeacherKeyHandlers();
       const params = new URLSearchParams(window.location.search);
       if (params.get("instance")) {
         await validateAdminInstance();
-        showAdminContent();
         await loadAdminInstance(state.instance, false);
         if (!isTetrisDemoCode(params.get("instance"))) {
           loadExistingInstances().catch((err) => {
@@ -1982,11 +1996,14 @@
         }
       } else {
         await loadExistingInstances();
-        showAdminContent();
         setHtml("adminStatus", '<p class="ok">Admin access loaded. Choose an instance or create a new one.</p>');
       }
+      showToast("Admin dashboard loaded.", { type: "success" });
     } catch (err) {
       setHtml("adminAuthStatus", '<p class="error">' + err.message + "</p>");
+      showToast(err.message, { type: "error" });
+    } finally {
+      dismissLoading();
     }
 
     document.getElementById("refreshRowsButton").addEventListener("click", async () => {
