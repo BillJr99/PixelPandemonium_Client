@@ -1690,8 +1690,9 @@
     if (!link) return;
     const row = document.getElementById("dashboardReplayLinkRow");
     const replayUrl = (state.instance && state.instance.replayUrl) || "";
+    // The link text is the static "Replay page for this instance" label from the
+    // markup; only set the href so the raw URL is not printed on the page.
     link.href = replayUrl || "#";
-    link.textContent = replayUrl || "";
     if (row) row.style.display = replayUrl ? "" : "none";
   }
 
