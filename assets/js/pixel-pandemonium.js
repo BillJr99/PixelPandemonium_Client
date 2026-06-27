@@ -1549,7 +1549,7 @@
     }
     const html = [
       '<table class="admin-table">',
-      "<thead><tr><th>ID</th><th>Timestamp</th><th>Data</th><th>Actions</th></tr></thead><tbody>"
+      "<thead><tr><th>ID</th><th>Timestamp</th><th>Data <span class=\"th-hint\">(x, y, width, height, color, gridX, gridY)</span></th><th>Actions</th></tr></thead><tbody>"
     ];
     rows.forEach((row) => {
       html.push(

@@ -139,6 +139,14 @@ a {
   font-size: 15px;
 }
 
+/* Smaller, lighter hint text inside a table header cell. */
+.th-hint {
+  display: block;
+  font-weight: normal;
+  font-size: 0.8em;
+  opacity: 0.75;
+}
+
 .page-wrap {
   padding: 18px;
 }
