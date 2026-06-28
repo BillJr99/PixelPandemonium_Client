@@ -171,6 +171,15 @@ a {
   padding: 6px;
 }
 
+/* Full-width helper text under a form-grid field. Spans both columns so it sits
+   on its own row beneath the input without disturbing the label/input alignment. */
+.form-grid .field-hint {
+  grid-column: 1 / -1;
+  margin: -4px 0 4px;
+  font-size: 0.8em;
+  opacity: 0.75;
+}
+
 button,
 input[type="button"],
 input[type="submit"] {

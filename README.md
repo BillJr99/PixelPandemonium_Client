@@ -179,8 +179,9 @@ Also confirm these server/client settings:
 1. Open `create-instance.html`.
 2. Enter the global teacher key when prompted. The local default is `teacher`.
 2. Leave `Picture Source` set to `Configured picture`.
-3. Pick a picture, optionally enter a unique instance name, then enter teacher
-   name, date/time, and expiration days. The default expiration is 12 months.
+3. Pick a picture, optionally enter an instance name, then enter teacher
+   name, date/time, and expiration days. Use a name you'll recognize later —
+   usually the class period and date. The default expiration is 12 months.
 4. Click `Create Instance`.
 5. Save or share the generated student URL, replay URL, and admin URL.
 
