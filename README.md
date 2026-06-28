@@ -179,10 +179,9 @@ Also confirm these server/client settings:
 1. Open `create-instance.html`.
 2. Enter the global teacher key when prompted. The local default is `teacher`.
 2. Leave `Picture Source` set to `Configured picture`.
-3. Pick a picture, optionally enter an instance label, then enter teacher
-   name, date/time, and expiration days. The instance label is a name you'll
-   recognize later — usually the class period and date, such as
-   `2nd Period — 12/9`. The default expiration is 12 months.
+3. Pick a picture, optionally enter an instance name, then enter teacher
+   name, date/time, and expiration days. Use a name you'll recognize later —
+   usually the class period and date. The default expiration is 12 months.
 4. Click `Create Instance`.
 5. Save or share the generated student URL, replay URL, and admin URL.
 
@@ -191,8 +190,8 @@ student URL is the link teachers share with students for that particular
 instance. They also include a class key, so guessing only the instance code is
 not enough to access the activity. The teacher URL and admin URL include a
 separate teacher key, so teacher/admin actions require the actual teacher link
-or admin access. Instance labels must be unique; if left blank, the generated
-instance code is used as the label. The name `tetris` is reserved for the
+or admin access. Instance names must be unique; if left blank, the generated
+instance code is used as the unique name. The name `tetris` is reserved for the
 built-in public demo. Multiple teachers can use the same picture at the same
 time without sharing replay data.
 

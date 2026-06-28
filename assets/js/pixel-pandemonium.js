@@ -1769,7 +1769,7 @@
     setHtml("adminCreateResult", [
       '<p class="ok">Instance created.</p>',
       '<p><strong>Instance Code:</strong> <span class="mono">' + htmlEscape(data.instanceCode) + "</span></p>",
-      '<p><strong>Instance Label:</strong> <span class="mono">' + htmlEscape(data.instanceName || data.instanceCode) + "</span></p>",
+      '<p><strong>Instance Name:</strong> <span class="mono">' + htmlEscape(data.instanceName || data.instanceCode) + "</span></p>",
       '<label>Student URL<br><input class="url-box" readonly value="' + htmlEscape(data.studentUrl || "") + '"></label>',
       '<br><label>Replay URL<br><input class="url-box" readonly value="' + htmlEscape(data.replayUrl || "") + '"></label>',
       '<br><label>Teacher URL<br><input class="url-box" readonly value="' + htmlEscape(data.teacherUrl || "") + '"></label>',
@@ -2138,7 +2138,7 @@
       '<div class="panel">',
       '<p class="ok">Instance created.</p>',
       '<p><strong>Instance Code:</strong> <span class="mono">' + data.instanceCode + "</span></p>",
-      '<p><strong>Instance Label:</strong> <span class="mono">' + (data.instanceName || data.instanceCode) + "</span></p>",
+      '<p><strong>Instance Name:</strong> <span class="mono">' + (data.instanceName || data.instanceCode) + "</span></p>",
       '<p><strong>Expires:</strong> ' + data.expiresAt + "</p>",
       '<label>Student URL<br><input class="url-box" readonly value="' + data.studentUrl + '"></label>',
       '<br><label>Replay URL<br><input class="url-box" readonly value="' + data.replayUrl + '"></label>',

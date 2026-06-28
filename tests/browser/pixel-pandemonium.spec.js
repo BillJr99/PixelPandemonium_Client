@@ -43,7 +43,7 @@ test("teacher dashboard creates an instance and renders URLs plus QR codes", asy
   await page.getByRole("button", { name: "Create Instance" }).click();
 
   await expect(page.locator("#createResult")).toContainText("Instance created");
-  await expect(page.locator("#createResult")).toContainText("Instance Label:");
+  await expect(page.locator("#createResult")).toContainText("Instance Name:");
   await expect(page.locator("#createResult input").nth(0)).toHaveValue(/instructions\.html\?instance=.*&key=/);
   await expect(page.locator("#createResult input").nth(1)).toHaveValue(/replay\.html\?instance=.*&key=/);
   await expect(page.locator("#createResult input").nth(2)).toHaveValue(/teacher-dashboard\.html\?instance=.*&teacherKey=.*&admin=/);
