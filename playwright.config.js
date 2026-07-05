@@ -8,7 +8,12 @@ module.exports = defineConfig({
   },
   use: {
     baseURL: "http://127.0.0.1:4000",
-    trace: "on-first-retry"
+    trace: "on-first-retry",
+    // Environments with a preinstalled Chromium (e.g. sandboxed CI) can point
+    // at it instead of downloading the pinned browser build.
+    ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+      ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } }
+      : {})
   },
   webServer: [
     {

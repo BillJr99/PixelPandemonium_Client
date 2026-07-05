@@ -379,7 +379,11 @@ For GitHub Pages, the server must be deployed separately. The static client cann
 - Admin page can create new configured-picture instances after admin-password
   login.
 - Admin page can edit or delete individual replay rows.
-- Instances cannot be deleted or deactivated from the client.
+- Active (non-expired) instances cannot be deleted or deactivated from the
+  client; expired instances show a Delete action in the instance list.
+- Every listed instance offers Set Expiration (teachers: their own instances;
+  admins: any). The admin instance list also shows soft-deleted (cleaned-up)
+  instances with a Restore action that assigns a new expiration date.
 - Admin page can generate a time-lapse from instance data in student completion order or random order.
 - Admin page can generate a finished-product time-lapse even if the activity is incomplete, using existing student work first and then filling missing pixels sequentially or randomly.
 - Multiple teachers can run the same picture at once because all data is instance-scoped.

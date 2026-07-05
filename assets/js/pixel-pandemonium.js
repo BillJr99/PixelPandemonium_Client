@@ -403,8 +403,48 @@
     return -1;
   }
 
+  // Bijective base-26 column labels: A=0 … Z=25, AA=26, AB=27, … Posterizer
+  // composites wider than 26 pages use multi-letter labels, so a plain
+  // charCodeAt(0) offset would collide AA-AZ with A and leave gaps.
+  function columnLabelToIndex(label) {
+    const letters = String(label || "").trim().toUpperCase();
+    let index = 0;
+    for (let i = 0; i < letters.length; i++) {
+      index = index * 26 + (letters.charCodeAt(i) - "A".charCodeAt(0) + 1);
+    }
+    return index - 1;
+  }
+
+  function columnIndexToLabel(index) {
+    let n = Number(index) + 1;
+    let label = "";
+    while (n > 0) {
+      label = String.fromCharCode("A".charCodeAt(0) + ((n - 1) % 26)) + label;
+      n = Math.floor((n - 1) / 26);
+    }
+    return label;
+  }
+
+  // Remaps whatever column labels / row numbers a composite uses onto a dense
+  // canonical grid (cols A.. by label order, rows 1.. by numeric order), so
+  // gapped or exotic label sets still satisfy pages.length === numRows*numCols
+  // and render without blank bands.
+  function normalizePageGrid(pages) {
+    const colLabels = Array.from(new Set(pages.map((page) => String(page.col || "").trim().toUpperCase())))
+      .sort((a, b) => columnLabelToIndex(a) - columnLabelToIndex(b));
+    const rowValues = Array.from(new Set(pages.map((page) => Number(page.row)))).sort((a, b) => a - b);
+    const colRank = new Map(colLabels.map((label, rank) => [label, rank]));
+    const rowRank = new Map(rowValues.map((value, rank) => [value, rank]));
+    const normalized = pages.map((page) => ({
+      ...page,
+      col: columnIndexToLabel(colRank.get(String(page.col || "").trim().toUpperCase())),
+      row: String(rowRank.get(Number(page.row)) + 1)
+    }));
+    return { pages: normalized, numRows: rowValues.length, numCols: colLabels.length };
+  }
+
   function pageLabel(row, col) {
-    return String.fromCharCode("A".charCodeAt(0) + col) + String(row + 1);
+    return columnIndexToLabel(col) + String(row + 1);
   }
 
   function messageParts(message) {
@@ -432,7 +472,7 @@
   }
 
   function expectedColor(majorRow, majorCol, subRow, subCol) {
-    const colLetter = String.fromCharCode("A".charCodeAt(0) + majorCol);
+    const colLetter = columnIndexToLabel(majorCol);
     const idx = lookupPage(majorRow + 1, colLetter);
     if (idx < 0) return null;
     const colorIndex = state.pages[idx].uncompressed[subRow * state.subcols + subCol];
@@ -472,7 +512,7 @@
   }
 
   function pageRangeLabel(start, end) {
-    const colLetter = String.fromCharCode("A".charCodeAt(0) + start.col);
+    const colLetter = columnIndexToLabel(start.col);
     if (start.row === end.row) return colLetter + String(start.row + 1);
     return colLetter + String(start.row + 1) + "-" + colLetter + String(end.row + 1);
   }
@@ -708,7 +748,7 @@
 
   function selectTile(row, col) {
     state.selectedTile = { row, col };
-    const colLetter = String.fromCharCode("A".charCodeAt(0) + col);
+    const colLetter = columnIndexToLabel(col);
     const pageIndex = lookupPage(row + 1, colLetter);
     if (pageIndex < 0) return;
     const page = state.pages[pageIndex];
@@ -945,7 +985,7 @@
     const cellH = canvas.height / (state.numRows * state.subrows);
     for (let majorCol = 0; majorCol < state.numCols; majorCol++) {
       for (let majorRow = 0; majorRow < state.numRows; majorRow++) {
-        const pageIndex = lookupPage(majorRow + 1, String.fromCharCode("A".charCodeAt(0) + majorCol));
+        const pageIndex = lookupPage(majorRow + 1, columnIndexToLabel(majorCol));
         if (pageIndex < 0) continue;
         const page = state.pages[pageIndex];
         for (let r = 0; r < state.subrows; r++) {
@@ -1140,7 +1180,7 @@
           }
         }
         pages.push({
-          col: String.fromCharCode("A".charCodeAt(0) + col),
+          col: columnIndexToLabel(col),
           row: String(row + 1),
           uncompressed,
           compressed: compressPixels(uncompressed)
@@ -1162,7 +1202,7 @@
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     spec.pages.forEach((page) => {
-      const col = page.col.charCodeAt(0) - "A".charCodeAt(0);
+      const col = columnLabelToIndex(page.col);
       const row = Number(page.row) - 1;
       page.uncompressed.forEach((pixel, index) => {
         const localX = index % state.subcols;
@@ -1172,6 +1212,34 @@
         ctx.fillRect((col * state.subcols + localX) * scale, (row * state.subrows + localY) * scale, scale, scale);
       });
     });
+  }
+
+  // Preview for built-in (menu-chosen) pictures: fetch the picture's spec.js
+  // from the server, parse it, and reuse drawSpecPreview. Cached per id; the
+  // token discards stale responses when the user changes the menu quickly.
+  const builtInSpecCache = new Map();
+  let builtInPreviewToken = 0;
+
+  async function previewBuiltInPicture(pictureId) {
+    const canvas = document.getElementById("customPreviewCanvas");
+    const token = ++builtInPreviewToken;
+    if (canvas) canvas.style.display = "none";
+    if (!pictureId) return;
+    try {
+      let spec = builtInSpecCache.get(pictureId);
+      if (!spec) {
+        const fromMenu = pictureFromMenu(pictureId);
+        const script = (fromMenu && fromMenu.script) || ("/pictures/" + encodeURIComponent(pictureId) + "/spec.js");
+        const res = await fetch(scriptUrl(script));
+        if (!res.ok) throw new Error("Spec fetch failed: " + res.status);
+        spec = parseCompositeJs(await res.text());
+        builtInSpecCache.set(pictureId, spec);
+      }
+      if (token !== builtInPreviewToken) return;
+      drawSpecPreview(spec);
+    } catch (err) {
+      logClient("warn", "Could not preview picture", { pictureId, error: err.message });
+    }
   }
 
   function parseJsArrayAssignment(text, name, nextName) {
@@ -1189,7 +1257,11 @@
     const numRows = Number((text.match(/var\s+numRows\s*=\s*(\d+)/) || [])[1]);
     const numCols = Number((text.match(/var\s+numCols\s*=\s*(\d+)/) || [])[1]);
     const pages = parseJsArrayAssignment(text, "pages", null);
-    return { palette, numRows, numCols, pages };
+    // Remap non-canonical page labels onto the dense grid (same as the CSV
+    // path), but keep the file's declared dimensions so validateClientSpec
+    // still catches incomplete composites whose page count falls short.
+    const grid = normalizePageGrid(pages);
+    return { palette, numRows, numCols, pages: grid.pages };
   }
 
   function parseCompositeCsv(text, palette) {
@@ -1201,9 +1273,10 @@
       const compressed = cells.slice(17).filter((item) => item !== "").map(Number);
       return { col: cells[0].trim(), row: cells[1].trim(), uncompressed, compressed };
     });
-    const cols = new Set(pages.map((page) => page.col)).size;
-    const rows = Math.max(...pages.map((page) => Number(page.row)));
-    return { palette, numRows: rows, numCols: cols, pages };
+    // Posterizer composites may use multi-letter or non-contiguous page labels;
+    // normalize onto a dense canonical grid before validation/rendering.
+    const grid = normalizePageGrid(pages);
+    return { palette, numRows: grid.numRows, numCols: grid.numCols, pages: grid.pages };
   }
 
   function parseColorMap(text) {
@@ -1406,12 +1479,17 @@
       if (isStatic) {
         customDraft = null;
         setHtml("customPictureStatus", "");
+        previewBuiltInPicture(document.getElementById("pictureId").value);
+      } else {
         const preview = document.getElementById("customPreviewCanvas");
         if (preview) preview.style.display = "none";
       }
     }
 
     document.getElementById("creationMode").addEventListener("change", syncMode);
+    pictureSelect.addEventListener("change", () => {
+      if (document.getElementById("creationMode").value === "static") previewBuiltInPicture(pictureSelect.value);
+    });
     document.getElementById("dimensionPreset").addEventListener("change", () => {
       const dims = selectedDimensions();
       if (dims.width && dims.height) {
@@ -1639,6 +1717,12 @@
     return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  // Server policy: only expired instances may be deleted, so the Delete action
+  // is only offered on rows that have already expired.
+  function isExpiredInstance(instance) {
+    return !!(instance && instance.expiresAt) && new Date(instance.expiresAt).getTime() <= Date.now();
+  }
+
   function renderInstancesList(instances) {
     if (!instances.length) {
       setHtml("instancesList", "<p>No active instances found.</p>");
@@ -1649,15 +1733,23 @@
       "<thead><tr><th>Instance</th><th>Picture</th><th>Teacher</th><th>Expires</th><th>Actions</th></tr></thead><tbody>"
     ];
     instances.forEach((instance, index) => {
+      // Soft-deleted rows only reach the list in admin mode; they can only be
+      // restored (with a new expiration date), not loaded or replayed.
+      const deleted = instance.active === false;
+      const actions = deleted
+        ? '<button type="button" data-action="set-expiration" data-index="' + index + '">Restore…</button>'
+        : '<button type="button" data-action="load-instance" data-index="' + index + '">Load</button> ' +
+          '<a href="' + htmlEscape(instance.studentUrl || "") + '" target="_blank" rel="noopener noreferrer">Student</a> ' +
+          '<a href="' + htmlEscape(instance.replayUrl || "") + '" target="_blank" rel="noopener noreferrer">Replay</a> ' +
+          '<button type="button" data-action="set-expiration" data-index="' + index + '">Set Expiration…</button>' +
+          (isExpiredInstance(instance) ? ' <button type="button" data-action="delete-instance" data-index="' + index + '">Delete</button>' : "");
       rows.push(
         "<tr>",
         "<td><span class=\"mono\">" + htmlEscape(instance.instanceName || instance.instanceCode) + "</span><br><small>" + htmlEscape(instance.instanceCode) + "</small></td>",
         "<td>" + htmlEscape(instance.pictureTitle || instance.pictureId) + "</td>",
         "<td>" + htmlEscape(instance.teacherName || "") + "</td>",
-        "<td>" + htmlEscape(instance.expiresAt || "") + "</td>",
-        '<td><button type="button" data-action="load-instance" data-index="' + index + '">Load</button> ' +
-          '<a href="' + htmlEscape(instance.studentUrl || "") + '" target="_blank">Student</a> ' +
-          '<a href="' + htmlEscape(instance.replayUrl || "") + '" target="_blank">Replay</a></td>',
+        "<td>" + htmlEscape(instance.expiresAt || "") + (deleted ? " <small>(deleted)</small>" : (isExpiredInstance(instance) ? " <small>(expired)</small>" : "")) + "</td>",
+        "<td>" + actions + "</td>",
         "</tr>"
       );
     });
@@ -1898,18 +1990,65 @@
     const list = document.getElementById("instancesList");
     if (list) {
       list.addEventListener("click", async (event) => {
-        const button = event.target.closest('button[data-action="load-instance"]');
+        const button = event.target.closest("button[data-action]");
         if (!button) return;
         const instance = (state.instances || [])[Number(button.dataset.index)];
         if (!instance) return;
         try {
-          if (instanceListMode === "admin") await loadAdminInstance(instance, true);
-          else await loadDashboardInstance(instance);
+          if (button.dataset.action === "delete-instance") {
+            await deleteListedInstance(instance);
+          } else if (button.dataset.action === "set-expiration") {
+            await setListedInstanceExpiration(instance);
+          } else if (button.dataset.action === "load-instance") {
+            if (instanceListMode === "admin") await loadAdminInstance(instance, true);
+            else await loadDashboardInstance(instance);
+          }
         } catch (err) {
           setHtml(instanceListMode === "admin" ? "adminStatus" : "dashboardAdminStatus", '<p class="error">' + err.message + "</p>");
         }
       });
     }
+  }
+
+  async function setListedInstanceExpiration(instance) {
+    const name = instance.instanceName || instance.instanceCode;
+    const restoring = instance.active === false;
+    const promptText = (restoring ? "Restore " : "Set a new expiration for ") + name + ": days from now";
+    const days = window.prompt(promptText, "30");
+    if (days === null) return;
+    const hours = Number(days) * 24;
+    if (!Number.isFinite(hours) || hours === 0) throw new Error("Enter a non-zero number of days");
+    const body = instanceListMode === "admin"
+      ? { adminPassword: adminPassword(), expirationHours: hours }
+      : { teacherAccessKey: teacherAccessKey(), expirationHours: hours };
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(instance.instanceCode) + "/expiration"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Expiration update failed");
+    await loadExistingInstances();
+    setHtml(instanceListMode === "admin" ? "adminStatus" : "dashboardAdminStatus",
+      '<p class="ok">' + (restoring ? "Restored " : "Updated expiration for ") + htmlEscape(name) + " (expires " + htmlEscape(data.expiresAt || "") + ").</p>");
+  }
+
+  async function deleteListedInstance(instance) {
+    const name = instance.instanceName || instance.instanceCode;
+    if (!window.confirm("Delete expired instance " + name + "? Its replay data will be removed.")) return;
+    const body = instanceListMode === "admin"
+      ? { adminPassword: adminPassword() }
+      : { teacherAccessKey: teacherAccessKey() };
+    const res = await fetch(serverUrl("/instance/" + encodeURIComponent(instance.instanceCode) + "/delete"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Delete failed");
+    // Re-fetch instead of splicing so data-index values stay aligned with state.instances.
+    await loadExistingInstances();
+    setHtml(instanceListMode === "admin" ? "adminStatus" : "dashboardAdminStatus", '<p class="ok">Deleted expired instance ' + htmlEscape(name) + ".</p>");
   }
 
   async function rotateInstanceKey(keyType) {
@@ -2045,7 +2184,7 @@
     const deleteButton = document.getElementById("deleteInstanceButton");
     if (deleteButton) {
       deleteButton.addEventListener("click", async () => {
-        setHtml("adminStatus", '<p class="error">Instances cannot be deactivated or deleted.</p>');
+        setHtml("adminStatus", '<p class="error">Active instances cannot be deactivated or deleted. Expired instances can be deleted from the instance list.</p>');
       });
     }
     document.getElementById("adminRows").addEventListener("click", async (event) => {
@@ -2235,6 +2374,12 @@
       fitAspectDimensions,
       fitAspectGridDimensions,
       formatPageRanges,
+      columnLabelToIndex,
+      columnIndexToLabel,
+      normalizePageGrid,
+      parseCompositeCsv,
+      parseCompositeJs,
+      isExpiredInstance,
       state
     }
   };
