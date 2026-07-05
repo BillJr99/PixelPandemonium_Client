@@ -533,7 +533,8 @@ test("expired instances can be deleted from the dashboard list; active rows cann
   const expired = await createInstance(request, "Expired Delete");
   await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(expired.instanceCode)}/expiration`, {
     headers: { Origin: "http://localhost:4000" },
-    data: { teacherAccessKey: "teacher", expirationHours: -1 }
+    // Teachers cannot force-expire; use the admin password to build the fixture.
+    data: { adminPassword: "admin", expirationHours: -1 }
   });
   const active = await createInstance(request, "Still Active");
 
@@ -556,7 +557,8 @@ test("teachers can extend the expiration of their own instances from the list", 
   const instance = await createInstance(request, "Extend Me");
   await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/expiration`, {
     headers: { Origin: "http://localhost:4000" },
-    data: { teacherAccessKey: "teacher", expirationHours: -1 }
+    // Teachers cannot force-expire; use the admin password to build the fixture.
+    data: { adminPassword: "admin", expirationHours: -1 }
   });
 
   await page.goto("/teacher-dashboard.html?teacherAccessKey=teacher");

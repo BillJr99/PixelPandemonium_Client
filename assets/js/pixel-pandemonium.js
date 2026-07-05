@@ -1230,7 +1230,7 @@
       if (!spec) {
         const fromMenu = pictureFromMenu(pictureId);
         const script = (fromMenu && fromMenu.script) || ("/pictures/" + encodeURIComponent(pictureId) + "/spec.js");
-        const res = await fetch(serverUrl(script));
+        const res = await fetch(scriptUrl(script));
         if (!res.ok) throw new Error("Spec fetch failed: " + res.status);
         spec = parseCompositeJs(await res.text());
         builtInSpecCache.set(pictureId, spec);
@@ -1257,7 +1257,11 @@
     const numRows = Number((text.match(/var\s+numRows\s*=\s*(\d+)/) || [])[1]);
     const numCols = Number((text.match(/var\s+numCols\s*=\s*(\d+)/) || [])[1]);
     const pages = parseJsArrayAssignment(text, "pages", null);
-    return { palette, numRows, numCols, pages };
+    // Remap non-canonical page labels onto the dense grid (same as the CSV
+    // path), but keep the file's declared dimensions so validateClientSpec
+    // still catches incomplete composites whose page count falls short.
+    const grid = normalizePageGrid(pages);
+    return { palette, numRows, numCols, pages: grid.pages };
   }
 
   function parseCompositeCsv(text, palette) {
@@ -1735,8 +1739,8 @@
       const actions = deleted
         ? '<button type="button" data-action="set-expiration" data-index="' + index + '">Restore…</button>'
         : '<button type="button" data-action="load-instance" data-index="' + index + '">Load</button> ' +
-          '<a href="' + htmlEscape(instance.studentUrl || "") + '" target="_blank">Student</a> ' +
-          '<a href="' + htmlEscape(instance.replayUrl || "") + '" target="_blank">Replay</a> ' +
+          '<a href="' + htmlEscape(instance.studentUrl || "") + '" target="_blank" rel="noopener noreferrer">Student</a> ' +
+          '<a href="' + htmlEscape(instance.replayUrl || "") + '" target="_blank" rel="noopener noreferrer">Replay</a> ' +
           '<button type="button" data-action="set-expiration" data-index="' + index + '">Set Expiration…</button>' +
           (isExpiredInstance(instance) ? ' <button type="button" data-action="delete-instance" data-index="' + index + '">Delete</button>' : "");
       rows.push(
