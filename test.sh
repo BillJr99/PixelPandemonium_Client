@@ -4,7 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
-SERVER_URL="$(sed -n 's/^server_url:[[:space:]]*//p' config.yaml | head -n 1 | tr -d '"' | tr -d "'")"
+# PIXEL_SERVER_URL overrides the configured server so CI and local runs can
+# target the sibling dev server instead of writing test data into production.
+SERVER_URL="${PIXEL_SERVER_URL:-$(sed -n 's/^server_url:[[:space:]]*//p' config.yaml | head -n 1 | tr -d '"' | tr -d "'")}"
 SERVER_URL="${SERVER_URL:-http://localhost:8000}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
 SERVER_PID=""

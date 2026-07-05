@@ -472,3 +472,103 @@ test("public tetris demo toasts and rolls back a wrong-color pixel", async ({ pa
   })).json();
   expect(rows.length).toBe(0);
 });
+
+test("column label helpers map multi-letter posterizer labels onto a dense grid", async ({ page }) => {
+  await page.goto("/create-instance.html?teacherAccessKey=teacher");
+  const results = await page.evaluate(() => {
+    const t = window.PixelPandemonium.__test;
+    const gapped = [
+      { col: "B", row: "3", uncompressed: new Array(15).fill(0) },
+      { col: "AA", row: "3", uncompressed: new Array(15).fill(0) },
+      { col: "B", row: "7", uncompressed: new Array(15).fill(0) },
+      { col: "AA", row: "7", uncompressed: new Array(15).fill(0) }
+    ];
+    return {
+      z: t.columnLabelToIndex("Z"),
+      aa: t.columnLabelToIndex("AA"),
+      ab: t.columnLabelToIndex("AB"),
+      roundTrip: t.columnIndexToLabel(t.columnLabelToIndex("AB")),
+      grid: t.normalizePageGrid(gapped)
+    };
+  });
+  expect(results.z).toBe(25);
+  expect(results.aa).toBe(26);
+  expect(results.ab).toBe(27);
+  expect(results.roundTrip).toBe("AB");
+  // Gapped labels (B/AA, rows 3/7) become a dense 2x2 grid with canonical labels.
+  expect(results.grid.numCols).toBe(2);
+  expect(results.grid.numRows).toBe(2);
+  expect(results.grid.pages.map((p) => p.col + p.row).sort()).toEqual(["A1", "A2", "B1", "B2"]);
+});
+
+test("teacher dashboard analyzes a multi-letter-column posterizer CSV into the correct grid", async ({ page }) => {
+  await page.goto("/create-instance.html?teacherAccessKey=teacher");
+  await page.locator("#creationMode").selectOption("spec");
+  await page.locator("#customTitle").fill("Multicol CSV Custom");
+  await page.locator("#specFiles").setInputFiles([
+    path.join(process.cwd(), "tests/fixtures/Post-It_multicol_composite.csv"),
+    path.join(process.cwd(), "tests/fixtures/ColorMap_multicol.txt")
+  ]);
+  await page.getByRole("button", { name: "Analyze Custom Picture" }).click();
+  // 28 page-columns (A..Z, AA, AB): the old charCodeAt(0) mapping collapsed
+  // AA/AB onto A/B and reported the wrong grid.
+  await expect(page.locator("#customPictureStatus")).toContainText("28 columns by 2 rows");
+  await expect(page.locator("#customPreviewCanvas")).toBeVisible();
+});
+
+test("create page previews a built-in picture and re-renders when the menu changes", async ({ page }) => {
+  await page.goto("/create-instance.html?teacherAccessKey=teacher");
+  await page.locator("#pictureId").selectOption("tetris");
+  await expect(page.locator("#customPreviewCanvas")).toBeVisible();
+  const firstWidth = await page.locator("#customPreviewCanvas").evaluate((canvas) => canvas.width);
+  expect(firstWidth).toBeGreaterThan(0);
+  await page.locator("#pictureId").selectOption("eagles");
+  await expect(page.locator("#customPreviewCanvas")).toBeVisible();
+  await expect
+    .poll(async () => page.locator("#customPreviewCanvas").evaluate((canvas) => canvas.width))
+    .not.toBe(firstWidth);
+});
+
+test("expired instances can be deleted from the dashboard list; active rows cannot", async ({ page, request }) => {
+  const expired = await createInstance(request, "Expired Delete");
+  await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(expired.instanceCode)}/expiration`, {
+    headers: { Origin: "http://localhost:4000" },
+    data: { teacherAccessKey: "teacher", expirationHours: -1 }
+  });
+  const active = await createInstance(request, "Still Active");
+
+  await page.goto("/teacher-dashboard.html?teacherAccessKey=teacher");
+  await page.waitForFunction(() => document.body.dataset.ppReady === "teacher-dashboard");
+  await page.getByRole("button", { name: "Load Instances" }).click();
+  const expiredRow = page.locator("tr", { hasText: expired.instanceCode });
+  const activeRow = page.locator("tr", { hasText: active.instanceCode });
+  await expect(expiredRow).toContainText("(expired)");
+  await expect(expiredRow.getByRole("button", { name: "Delete" })).toBeVisible();
+  await expect(activeRow.getByRole("button", { name: "Delete" })).toHaveCount(0);
+
+  page.on("dialog", (dialog) => dialog.accept());
+  await expiredRow.getByRole("button", { name: "Delete" }).click();
+  await expect(page.locator("tr", { hasText: expired.instanceCode })).toHaveCount(0);
+  await expect(page.locator("#dashboardAdminStatus")).toContainText("Deleted expired instance");
+});
+
+test("teachers can extend the expiration of their own instances from the list", async ({ page, request }) => {
+  const instance = await createInstance(request, "Extend Me");
+  await request.post(`http://127.0.0.1:8000/instance/${encodeURIComponent(instance.instanceCode)}/expiration`, {
+    headers: { Origin: "http://localhost:4000" },
+    data: { teacherAccessKey: "teacher", expirationHours: -1 }
+  });
+
+  await page.goto("/teacher-dashboard.html?teacherAccessKey=teacher");
+  await page.waitForFunction(() => document.body.dataset.ppReady === "teacher-dashboard");
+  await page.getByRole("button", { name: "Load Instances" }).click();
+  const row = page.locator("tr", { hasText: instance.instanceCode });
+  await expect(row).toContainText("(expired)");
+
+  page.on("dialog", (dialog) => dialog.accept("30"));
+  await row.getByRole("button", { name: "Set Expiration…" }).click();
+  await expect(page.locator("#dashboardAdminStatus")).toContainText("Updated expiration for");
+  const refreshedRow = page.locator("tr", { hasText: instance.instanceCode });
+  await expect(refreshedRow).not.toContainText("(expired)");
+  await expect(refreshedRow.getByRole("button", { name: "Delete" })).toHaveCount(0);
+});

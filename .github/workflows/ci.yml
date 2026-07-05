@@ -40,6 +40,18 @@ jobs:
           grep -q "initAdmin" assets/js/pixel-pandemonium.js
           grep -q "analyzeCustomPicture" assets/js/pixel-pandemonium.js
           grep -q "parseCompositeJs" assets/js/pixel-pandemonium.js
+          # Multi-letter posterizer column labels stay handled (base-26 helpers
+          # replaced the single-letter charCodeAt mapping that broke >26-column
+          # composites and gapped label sets).
+          grep -q "columnLabelToIndex" assets/js/pixel-pandemonium.js
+          grep -q "normalizePageGrid" assets/js/pixel-pandemonium.js
+          ! grep -q 'page.col.charCodeAt(0) - "A".charCodeAt(0)' assets/js/pixel-pandemonium.js
+          # Built-in picture preview and instance-list management actions exist.
+          grep -q "previewBuiltInPicture" assets/js/pixel-pandemonium.js
+          grep -q "delete-instance" assets/js/pixel-pandemonium.js
+          grep -q "set-expiration" assets/js/pixel-pandemonium.js
+          test -f tests/fixtures/Post-It_multicol_composite.csv
+          test -f tests/fixtures/ColorMap_multicol.txt
           # Picture catalog has moved to the server: the client fetches it and no
           # longer carries a catalog or picture files.
           grep -q "loadPictures" assets/js/pixel-pandemonium.js
