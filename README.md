@@ -558,3 +558,7 @@ New controls intentionally match the existing classroom activity style:
 - simple form panels
 
 Avoid redesigning the UI unless a new feature requires a minimal matching extension.
+
+## License
+
+Released under the MIT License. See [LICENSE](LICENSE).
